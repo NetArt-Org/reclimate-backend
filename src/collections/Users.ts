@@ -22,10 +22,14 @@ const adminOrFirstUser: FieldAccess = ({ req }) => !req.user || roleOf(req) === 
 
 export const Users: CollectionConfig = {
   slug: 'users',
+  labels: { singular: 'Person', plural: 'People' },
   admin: {
     useAsTitle: 'name',
     defaultColumns: ['name', 'role', 'phone', 'site'],
+    listSearchableFields: ['name', 'phone', 'village'],
     group: 'People',
+    description:
+      'Everyone who can sign in. Workers and supervisors use the phone app with their phone number and PIN; admins use this panel.',
   },
   auth: {
     // The app signs in with phone number + PIN: the phone's digits are the username.
@@ -34,6 +38,13 @@ export const Users: CollectionConfig = {
     tokenExpiration: 60 * 60 * 24 * 30,
     maxLoginAttempts: 10,
     lockTime: 10 * 60 * 1000,
+    cookies: {
+      // Strict works while the app and this server share a site (localhost, or
+      // app.example.com + api.example.com). Hosting them on unrelated domains
+      // needs COOKIE_SAMESITE=None, which browsers only accept over HTTPS.
+      sameSite: (process.env.COOKIE_SAMESITE as 'Lax' | 'None' | 'Strict' | undefined) || 'Strict',
+      secure: process.env.NODE_ENV === 'production',
+    },
   },
   access: {
     admin: ({ req }) => roleOf(req) === 'admin',
@@ -47,8 +58,11 @@ export const Users: CollectionConfig = {
   },
   hooks: {
     beforeValidate: [
-      ({ data }) => {
-        if (data?.phone && !data.username) data.username = phoneToUsername(data.phone)
+      ({ data, originalDoc }) => {
+        // The phone number is the login: keep the username in step with it.
+        if (data?.phone && (!data.username || data.phone !== originalDoc?.phone)) {
+          data.username = phoneToUsername(data.phone)
+        }
         return data
       },
     ],
@@ -72,14 +86,18 @@ export const Users: CollectionConfig = {
       name: 'site',
       type: 'relationship',
       relationTo: 'sites',
+      admin: { description: 'Where this person works. They only see batches and setup lists of this site.' },
       access: { create: adminOrFirstUser, update: isAdminField },
     },
     {
       name: 'phone',
       type: 'text',
-      admin: { description: 'As shown in the app, e.g. +62 812-0000-0000. Its digits become the login username.' },
+      admin: {
+        description:
+          'e.g. +62 812-0000-0000. This is what the person types to sign in to the app (the Username is filled in from it).',
+      },
     },
-    { name: 'village', type: 'text' },
+    { name: 'village', label: 'Village / address', type: 'text' },
     {
       name: 'jobTitle',
       type: 'text',
@@ -89,9 +107,10 @@ export const Users: CollectionConfig = {
         condition: (data) => data?.role === 'supervisor',
       },
     },
-    { name: 'avatar', type: 'upload', relationTo: 'media' },
+    { name: 'avatar', label: 'Profile photo', type: 'upload', relationTo: 'media' },
     {
       name: 'lang',
+      label: 'App language',
       type: 'select',
       defaultValue: 'en',
       options: [

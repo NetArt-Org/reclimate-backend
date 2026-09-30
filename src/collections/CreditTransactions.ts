@@ -16,7 +16,10 @@ const readTransactions: Access = ({ req }) => {
  */
 export const CreditTransactions: CollectionConfig = {
   slug: 'credit-transactions',
+  labels: { singular: 'Credit entry', plural: 'Credit history' },
   admin: {
+    description:
+      'Every credit earned or sold. Entries are added automatically when a batch is approved or a sell request is paid — you rarely need to add one by hand.',
     useAsTitle: 'title',
     defaultColumns: ['title', 'worker', 'type', 'amount', 'date'],
     group: 'Credits',

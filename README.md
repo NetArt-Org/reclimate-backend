@@ -29,17 +29,29 @@ To wipe the demo data and start again: `SEED_RESET=true npm run seed`.
 | `sites` | Production sites | Site picker |
 | `setup-items` | Per-site lists: kilns, sources, farmers, vehicles, bags, buyers… | Profile → Site setup |
 | `batches` | One biochar batch; a tab per wizard day + the supervisor's review | Home, Process, Wizard, Review |
-| `media` | Photos and videos (local `./media` folder for now, S3 later) | Camera |
+| `media` | Photos and videos (local `./media` folder for now, S3 later) | Camera, profile photo |
 | `credit-transactions` | Credits ledger (earned / sold) | Credits history |
 | `sell-requests` | A worker's request to sell credits | Credits → Sell |
 | `settings` (global) | Credit factor, price, goal, max moisture | — |
 
 Rules enforced on the server (`src/hooks`, `src/access`):
 
-- Workers see only their own batches; supervisors see their site's; admins see everything.
-- Workers cannot approve or reject a batch, and can only finish one that was approved.
-- `collect.weightKg` and `credits` are computed on save.
+- Nothing is readable without signing in — including photo and video files.
+- Workers see only their own batches and files; supervisors see their site's; admins see everything.
+- Workers cannot approve or reject a batch, and can only finish one that was approved. A stale save
+  from an offline phone never undoes a supervisor's decision.
+- `collect.weightKg` and `credits` are computed on save and ignored if a client sends them.
+- Role and site can only be changed by an admin. Credit entries can only be written by the server or an admin.
 - Approving a batch writes one "earned" row to the ledger; marking a sell request **paid** writes one "sold" row.
+
+## Sessions and origins
+
+- Login sets an HttpOnly, SameSite=Strict cookie (browser) and returns a token (the mobile app keeps it
+  in the device Keystore/Keychain). Ten wrong PINs lock the account for 10 minutes.
+- `CORS_ORIGINS` lists who may call the API; the same list plus `SERVER_URL` is the CSRF allow-list for
+  cookie sessions. Set `SERVER_URL` when you deploy, or saving in the admin panel will be refused.
+- Uploaded files are stored in `./media` on this server until S3 is connected, so host it somewhere
+  with a persistent disk (not a serverless platform) for now.
 
 ## API quick reference
 

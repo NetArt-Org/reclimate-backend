@@ -26,6 +26,10 @@ const origins = (
   .map((o) => o.trim())
   .filter(Boolean)
 
+// Where this server itself is reached. The admin panel's own saves come from
+// here, so it must pass the CSRF check alongside the app's origins.
+const serverOrigin = (process.env.SERVER_URL || 'http://localhost:3001').replace(/\/$/, '')
+
 export default buildConfig({
   admin: {
     user: Users.slug,
@@ -33,6 +37,7 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
     meta: { titleSuffix: '· Reclimate dMRV' },
+    components: { beforeDashboard: ['/components/BeforeDashboard'] },
   },
   collections: [Batches, Media, CreditTransactions, SellRequests, Users, Sites, SetupItems],
   globals: [Settings],
@@ -46,7 +51,7 @@ export default buildConfig({
     fallback: true,
   },
   cors: origins,
-  csrf: origins,
+  csrf: [...origins, serverOrigin],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {

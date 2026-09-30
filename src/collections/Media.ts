@@ -1,6 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
-import { isLoggedIn, roleOf } from '../access'
+import { isLoggedIn, roleOf, siteWhere } from '../access'
 
 /**
  * Photos and videos captured in the wizard, plus profile photos.
@@ -9,11 +9,21 @@ import { isLoggedIn, roleOf } from '../access'
  */
 export const Media: CollectionConfig = {
   slug: 'media',
-  admin: { group: 'Evidence' },
+  labels: { singular: 'Photo / video', plural: 'Photos & videos' },
+  admin: {
+    group: 'Production',
+    defaultColumns: ['filename', 'uploadedBy', 'capturedAt', 'createdAt'],
+    description: 'Everything captured in the app. Open a batch to see its photos in context.',
+  },
   access: {
-    // Public so the app can show files in plain <img>/<video> tags.
-    // Tighten (signed URLs) when moving to S3.
-    read: () => true,
+    // Evidence is private: a worker sees their own files, a supervisor their site's.
+    // This also guards the file URLs (/api/media/file/…), not just the list.
+    read: ({ req }) => {
+      if (!req.user) return false
+      if (roleOf(req) === 'admin') return true
+      if (roleOf(req) === 'supervisor') return siteWhere(req, 'uploadedBy.site')
+      return { uploadedBy: { equals: req.user.id } }
+    },
     create: isLoggedIn,
     update: ({ req }) => {
       if (!req.user) return false

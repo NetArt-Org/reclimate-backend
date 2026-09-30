@@ -3,6 +3,14 @@ import { Forbidden, type CollectionBeforeChangeHook } from 'payload'
 import type { Batch } from '@/payload-types'
 import { roleOf, siteOf } from '../access'
 
+/** Status changes a worker may make themselves; everything else is a supervisor's call. */
+const WORKER_MOVES: Record<string, string[]> = {
+  progress: ['waiting'],
+  rejected: ['waiting'],
+  // Day 4 can only be finished on a batch a supervisor has approved.
+  approved: ['done'],
+}
+
 const round = (n: number, digits = 2) => Math.round(n * 10 ** digits) / 10 ** digits
 
 /**
@@ -19,8 +27,8 @@ export const batchBeforeChange: CollectionBeforeChangeHook<Batch> = async ({
 }) => {
   const role = roleOf(req)
   const prevStatus = originalDoc?.status
+  const statusChanged = operation === 'create' ? !!data.status : (data.status ?? prevStatus) !== prevStatus
   const nextStatus = data.status ?? prevStatus
-  const statusChanged = operation === 'create' ? !!data.status : nextStatus !== prevStatus
 
   if (req.user && operation === 'create' && role !== 'admin') {
     if (role === 'worker') data.worker = req.user.id
@@ -28,16 +36,22 @@ export const batchBeforeChange: CollectionBeforeChangeHook<Batch> = async ({
   }
 
   if (req.user && role === 'worker' && statusChanged) {
-    if (nextStatus === 'approved' || nextStatus === 'rejected') throw new Forbidden(req.t)
-    // Day 4 can only be finished on a batch a supervisor has approved.
-    if (nextStatus === 'done' && prevStatus !== 'approved') throw new Forbidden(req.t)
+    if (operation === 'create') {
+      if (nextStatus !== 'progress' && nextStatus !== 'waiting') throw new Forbidden(req.t)
+    } else if (!WORKER_MOVES[prevStatus ?? 'progress']?.includes(nextStatus ?? '')) {
+      // The phone may be out of date (it works offline): keep the server's status
+      // rather than let a stale save undo a supervisor's decision.
+      data.status = prevStatus
+    }
   }
 
-  if (req.user && role !== 'worker' && statusChanged && (nextStatus === 'approved' || nextStatus === 'rejected')) {
-    data.review = {
-      ...data.review,
-      reviewedBy: data.review?.reviewedBy ?? req.user.id,
-      reviewedAt: data.review?.reviewedAt ?? new Date().toISOString(),
+  const decided = data.status === 'approved' || data.status === 'rejected' || data.status === 'done'
+  if (req.user && role !== 'worker' && statusChanged && decided) {
+    // A fresh decision always carries the current reviewer and time.
+    data.review = { ...data.review, reviewedBy: req.user.id, reviewedAt: new Date().toISOString() }
+    if (data.status !== 'rejected') {
+      data.review.rejectReason = null
+      data.review.rejectNote = null
     }
   }
 

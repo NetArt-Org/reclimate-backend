@@ -10,7 +10,10 @@ const readOwn: Access = ({ req }) => {
 /** "Sell credits" on the Credits screen. An admin marks it paid, which debits the ledger. */
 export const SellRequests: CollectionConfig = {
   slug: 'sell-requests',
+  labels: { singular: 'Sell request', plural: 'Sell requests' },
   admin: {
+    description:
+      'Workers ask to sell their credits from the app. Set Status to Paid once the buyer has paid — that takes the credits off the worker\'s balance.',
     defaultColumns: ['worker', 'credits', 'buyer', 'status', 'createdAt'],
     group: 'Credits',
   },

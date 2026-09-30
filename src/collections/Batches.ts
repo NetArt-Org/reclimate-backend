@@ -1,6 +1,9 @@
 import type { CollectionConfig, Field } from 'payload'
 
 import { isAdmin, isLoggedIn, isStaffField, ownOrSite } from '../access'
+
+/** Computed by the server on save (see hooks/batchBeforeChange) — never accepted from a client. */
+const computed = { create: () => false, update: () => false }
 import { batchBeforeChange } from '../hooks/batchBeforeChange'
 import { creditOnApproval } from '../hooks/creditOnApproval'
 
@@ -28,10 +31,14 @@ export const REJECT_REASONS = [
  */
 export const Batches: CollectionConfig = {
   slug: 'batches',
+  labels: { singular: 'Batch', plural: 'Batches' },
   admin: {
     useAsTitle: 'code',
-    defaultColumns: ['code', 'status', 'day', 'worker', 'site', 'credits', 'startedAt'],
+    defaultColumns: ['code', 'status', 'worker', 'site', 'day', 'credits', 'startedAt'],
+    listSearchableFields: ['code'],
     group: 'Production',
+    description:
+      'Each batch is one burn, recorded by a worker over 4 days. To review one: open it, check the photos in each Day tab, then set Status to Approved or Rejected and save.',
   },
   access: { read: ownOrSite, create: isLoggedIn, update: ownOrSite, delete: isAdmin },
   hooks: {
@@ -49,6 +56,10 @@ export const Batches: CollectionConfig = {
           required: true,
           defaultValue: 'progress',
           index: true,
+          admin: {
+            description:
+              'Waiting approval = ready for a supervisor. Approved gives the worker their credits. Rejected sends it back with the reason on the Review tab.',
+          },
           options: [
             { label: 'In progress', value: 'progress' },
             { label: 'Waiting approval', value: 'waiting' },
@@ -90,6 +101,7 @@ export const Batches: CollectionConfig = {
         {
           name: 'credits',
           type: 'number',
+          access: computed,
           admin: { readOnly: true, description: 'Biochar litres × credit factor (Settings).' },
         },
       ],
@@ -116,7 +128,12 @@ export const Batches: CollectionConfig = {
                     { label: 'ton', value: 'ton' },
                   ],
                 },
-                { name: 'weightKg', type: 'number', admin: { readOnly: true, description: 'Computed' } },
+                {
+                  name: 'weightKg',
+                  type: 'number',
+                  access: computed,
+                  admin: { readOnly: true, description: 'Computed' },
+                },
               ],
             },
             {
@@ -255,12 +272,14 @@ export const Batches: CollectionConfig = {
             {
               name: 'rejectReason',
               type: 'select',
+              admin: { description: 'Only needed when Status is Rejected. The worker is sent back to redo this step.' },
               options: REJECT_REASONS,
               access: { create: isStaffField, update: isStaffField },
             },
             {
               name: 'rejectNote',
               type: 'textarea',
+              admin: { description: 'Optional message shown to the worker.' },
               access: { create: isStaffField, update: isStaffField },
             },
           ],

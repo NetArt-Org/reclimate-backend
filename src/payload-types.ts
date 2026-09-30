@@ -144,6 +144,8 @@ export interface UserAuthOperations {
       };
 }
 /**
+ * Each batch is one burn, recorded by a worker over 4 days. To review one: open it, check the photos in each Day tab, then set Status to Approved or Rejected and save.
+ *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "batches".
  */
@@ -153,6 +155,9 @@ export interface Batch {
    * e.g. B-2309
    */
   code: string;
+  /**
+   * Waiting approval = ready for a supervisor. Approved gives the worker their credits. Rejected sends it back with the reason on the Review tab.
+   */
   status: 'progress' | 'waiting' | 'approved' | 'rejected' | 'done';
   /**
    * Current day 1–4, or 5 once every day is complete.
@@ -290,13 +295,21 @@ export interface Batch {
   review?: {
     reviewedBy?: (number | null) | User;
     reviewedAt?: string | null;
+    /**
+     * Only needed when Status is Rejected. The worker is sent back to redo this step.
+     */
     rejectReason?: ('quench' | 'fire' | 'video' | 'moist' | 'qty') | null;
+    /**
+     * Optional message shown to the worker.
+     */
     rejectNote?: string | null;
   };
   updatedAt: string;
   createdAt: string;
 }
 /**
+ * Everyone who can sign in. Workers and supervisors use the phone app with their phone number and PIN; admins use this panel.
+ *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "users".
  */
@@ -304,9 +317,12 @@ export interface User {
   id: number;
   name: string;
   role: 'admin' | 'supervisor' | 'worker';
+  /**
+   * Where this person works. They only see batches and setup lists of this site.
+   */
   site?: (number | null) | Site;
   /**
-   * As shown in the app, e.g. +62 812-0000-0000. Its digits become the login username.
+   * e.g. +62 812-0000-0000. This is what the person types to sign in to the app (the Username is filled in from it).
    */
   phone?: string | null;
   village?: string | null;
@@ -338,6 +354,8 @@ export interface User {
   collection: 'users';
 }
 /**
+ * Production sites. Every worker, supervisor and batch belongs to one.
+ *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "sites".
  */
@@ -350,6 +368,8 @@ export interface Site {
   createdAt: string;
 }
 /**
+ * Everything captured in the app. Open a batch to see its photos in context.
+ *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "media".
  */
@@ -383,6 +403,8 @@ export interface Media {
   };
 }
 /**
+ * Every credit earned or sold. Entries are added automatically when a batch is approved or a sell request is paid — you rarely need to add one by hand.
+ *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "credit-transactions".
  */
@@ -402,6 +424,8 @@ export interface CreditTransaction {
   createdAt: string;
 }
 /**
+ * Workers ask to sell their credits from the app. Set Status to Paid once the buyer has paid — that takes the credits off the worker's balance.
+ *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "sell-requests".
  */
@@ -418,6 +442,8 @@ export interface SellRequest {
   createdAt: string;
 }
 /**
+ * The choices workers pick from in the app: kilns, biomass sources, farmers, bags, buyers… Filter by Category to see one list.
+ *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "setup-items".
  */
@@ -767,6 +793,8 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
   createdAt?: T;
 }
 /**
+ * The numbers used to turn biochar into credits. Changes apply to batches saved afterwards.
+ *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "settings".
  */

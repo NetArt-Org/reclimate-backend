@@ -5,7 +5,8 @@ import { roleOf } from '../access'
 /** Numbers the app currently hardcodes in src/data/constants.ts and src/lib/batch.ts. */
 export const Settings: GlobalConfig = {
   slug: 'settings',
-  admin: { group: 'Setup' },
+  label: 'Credit & quality settings',
+  admin: { group: 'Setup', description: 'The numbers used to turn biochar into credits. Changes apply to batches saved afterwards.' },
   access: {
     read: ({ req }) => !!req.user,
     update: ({ req }) => roleOf(req) === 'admin',

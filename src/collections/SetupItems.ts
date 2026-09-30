@@ -19,10 +19,14 @@ export const SETUP_CATEGORIES = [
 /** The per-site lists under Profile → Site setup (kilns, farmers, bags…). */
 export const SetupItems: CollectionConfig = {
   slug: 'setup-items',
+  labels: { singular: 'Site setup item', plural: 'Site setup lists' },
   admin: {
     useAsTitle: 'name',
     defaultColumns: ['name', 'category', 'detail', 'site'],
+    listSearchableFields: ['name', 'detail'],
     group: 'Setup',
+    description:
+      'The choices workers pick from in the app: kilns, biomass sources, farmers, bags, buyers… Filter by Category to see one list.',
   },
   access: { read: sameSite, create: isLoggedIn, update: sameSite, delete: sameSite },
   hooks: {
