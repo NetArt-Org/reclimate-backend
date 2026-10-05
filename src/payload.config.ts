@@ -28,17 +28,22 @@ const origins = (
 
 // Where this server itself is reached. The admin panel's own saves come from
 // here, so it must pass the CSRF check alongside the app's origins.
-const serverOrigin = (process.env.SERVER_URL || 'http://localhost:3001').replace(/\/$/, '')
+// Netlify provides the site's address as URL, so it works there even if SERVER_URL is not set.
+const serverOrigin = (process.env.SERVER_URL || process.env.URL || 'http://localhost:3001').replace(/\/$/, '')
 
 export default buildConfig({
   admin: {
     user: Users.slug,
     importMap: {
       baseDir: path.resolve(dirname),
+      importMapFile: path.resolve(dirname, 'app/(payload)/cms/importMap.js'),
     },
     meta: { titleSuffix: '· Reclimate dMRV' },
     components: { beforeDashboard: ['/components/BeforeDashboard'] },
   },
+  // /admin is the Reclimate dashboard (src/app/(dashboard)). Payload's built-in editor stays
+  // reachable at /cms for raw data fixes until every section exists in the dashboard.
+  routes: { admin: '/cms' },
   collections: [Batches, Media, CreditTransactions, SellRequests, Users, Sites, SetupItems],
   globals: [Settings],
   // The app is English + Bahasa Indonesia; request `?locale=all` to get { en, id } pairs.

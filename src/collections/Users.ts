@@ -59,9 +59,15 @@ export const Users: CollectionConfig = {
   hooks: {
     beforeValidate: [
       ({ data, originalDoc }) => {
-        // The phone number is the login: keep the username in step with it.
-        if (data?.phone && (!data.username || data.phone !== originalDoc?.phone)) {
+        if (!data) return data
+        // Field accounts sign in with their phone number: keep the username in step with it.
+        // Admins choose their own username, so editing an admin's phone never changes their login.
+        const role = data.role ?? originalDoc?.role
+        if (role !== 'admin' && data.phone && (!data.username || data.phone !== originalDoc?.phone)) {
           data.username = phoneToUsername(data.phone)
+        } else if (typeof data.username === 'string' && /^[\d\s+().-]+$/.test(data.username)) {
+          // Someone typed the number as "+62 812-0000-0000": the app signs in with digits only.
+          data.username = phoneToUsername(data.username)
         }
         return data
       },

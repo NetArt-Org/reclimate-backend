@@ -33,25 +33,25 @@ export default async function BeforeDashboard() {
 
   const tiles = [
     {
-      href: '/admin/collections/batches?where[status][equals]=waiting',
+      href: '/cms/collections/batches?where[status][equals]=waiting',
       label: 'Batches waiting for review',
       n: waiting,
       hint: 'Open one, check the photos, then approve or reject.',
     },
     {
-      href: '/admin/collections/batches?where[status][equals]=progress',
+      href: '/cms/collections/batches?where[status][equals]=progress',
       label: 'Batches in progress',
       n: inProgress,
       hint: 'Workers are still recording these.',
     },
     {
-      href: '/admin/collections/sell-requests?where[status][equals]=pending',
+      href: '/cms/collections/sell-requests?where[status][equals]=pending',
       label: 'Sell requests to handle',
       n: sellPending,
       hint: 'Mark as Paid once the buyer has paid.',
     },
     {
-      href: '/admin/collections/users?where[role][equals]=worker',
+      href: '/cms/collections/users?where[role][equals]=worker',
       label: 'Workers',
       n: workers,
       hint: 'Add people, change a PIN or move someone to another site.',
