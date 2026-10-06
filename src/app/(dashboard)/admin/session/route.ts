@@ -31,7 +31,12 @@ export async function POST(req: Request) {
     return await signIn(req)
   } catch (err) {
     console.error('[session] sign-in failed', err)
-    return json({ error: 'Sign-in is temporarily unavailable. Please try again shortly.' }, 500)
+    // TEMPORARY diagnostics for the Netlify deploy: error type and first line only, key-like text removed.
+    const e = err as { name?: string; code?: string; message?: string }
+    const detail = `${e.name ?? 'Error'}${e.code ? ` ${e.code}` : ''}: ${String(e.message ?? '').split('\n')[0].slice(0, 300)}`
+      .replace(/-----BEGIN[\s\S]*?-----END[^-]*-----/g, '[key]')
+      .replace(/[A-Za-z0-9+/=_-]{40,}/g, '[redacted]')
+    return json({ error: 'Sign-in is temporarily unavailable. Please try again shortly.', detail }, 500)
   }
 }
 
