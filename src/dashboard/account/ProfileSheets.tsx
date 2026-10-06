@@ -6,32 +6,12 @@ import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
 import { useSession } from '../components/shell/session'
-import { Button, Field, Input, NativeSelect, Sheet, Switch } from '../components/ui'
+import { Button, Field, Input, Sheet, Switch } from '../components/ui'
+import { CountryCodeSelect } from '../components/ui/CountryCodeSelect'
+import { joinPhone, splitPhone } from '../lib/phone'
 import { clientAuth } from '@/lib/firebase/client'
 
 /** The signed-in admin's own profile (saved to Neon) and password (managed by Firebase). */
-
-const COUNTRIES = [
-  { code: '+62', label: 'Indonesia +62' },
-  { code: '+60', label: 'Malaysia +60' },
-  { code: '+65', label: 'Singapore +65' },
-  { code: '+91', label: 'India +91' },
-  { code: '+63', label: 'Philippines +63' },
-  { code: '+66', label: 'Thailand +66' },
-  { code: '+84', label: 'Vietnam +84' },
-  { code: '+61', label: 'Australia +61' },
-  { code: '+44', label: 'United Kingdom +44' },
-  { code: '+1', label: 'United States / Canada +1' },
-]
-
-/** "+62 812-555-0109" → { code: "+62", rest: "812-555-0109" } */
-function splitPhone(phone?: string) {
-  const p = (phone ?? '').trim()
-  const c = [...COUNTRIES]
-    .sort((a, b) => b.code.length - a.code.length)
-    .find((x) => p.startsWith(x.code))
-  return c ? { code: c.code, rest: p.slice(c.code.length).trim() } : { code: '+62', rest: p }
-}
 
 async function patchMe(id: number | string, body: object) {
   const res = await fetch(`/api/users/${id}?depth=0`, {
@@ -66,11 +46,11 @@ export function EditProfileSheet({
 
 function EditProfileForm({ onDone }: { onDone: () => void }) {
   const { user, setUser } = useSession()
-  const initial = splitPhone(user.phone)
+  const initial = splitPhone(user.phone, 'IN')
   const [name, setName] = useState(user.name)
   const [googleSignIn, setGoogleSignIn] = useState(!!user.googleSignIn)
-  const [code, setCode] = useState(initial.code)
-  const [rest, setRest] = useState(initial.rest)
+  const [iso, setIso] = useState(initial.iso)
+  const [rest, setRest] = useState(initial.number)
   const [busy, setBusy] = useState(false)
 
   const submit = async (e: FormEvent) => {
@@ -79,7 +59,7 @@ function EditProfileForm({ onDone }: { onDone: () => void }) {
     if (rest && digits.length < 6) return toast.error('Enter the full phone number')
     setBusy(true)
     try {
-      const phone = digits ? `${code} ${rest.trim()}` : ''
+      const phone = digits ? joinPhone(iso, rest) : ''
       const doc = await patchMe(user.id, {
         name: name.trim(),
         phone: phone || null,
@@ -116,18 +96,7 @@ function EditProfileForm({ onDone }: { onDone: () => void }) {
       </Field>
       <Field label="Phone">
         <div className="flex gap-2">
-          <NativeSelect
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            className="w-44"
-            aria-label="Country code"
-          >
-            {COUNTRIES.map((c) => (
-              <option key={c.code + c.label} value={c.code}>
-                {c.label}
-              </option>
-            ))}
-          </NativeSelect>
+          <CountryCodeSelect value={iso} onChange={setIso} />
           <Input
             type="tel"
             inputMode="tel"

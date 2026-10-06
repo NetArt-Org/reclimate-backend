@@ -1,4 +1,4 @@
-/** Country dialling codes for the certificate phone field. */
+/** Country dialling codes for phone fields (profile, certificate settings). */
 export const COUNTRIES: { iso: string; name: string; dial: string }[] = [
   { iso: 'SG', name: 'Singapore', dial: '+65' },
   { iso: 'IN', name: 'India', dial: '+91' },
@@ -43,14 +43,18 @@ export const COUNTRIES: { iso: string; name: string; dial: string }[] = [
 
 const byDialLength = [...COUNTRIES].sort((a, b) => b.dial.length - a.dial.length)
 
-/** "+65 6123 4567" → { iso: 'SG', number: '6123 4567' }. Unknown or missing codes default to Singapore. */
-export function splitPhone(phone: string): { iso: string; number: string } {
-  const p = phone.trim()
+/** Flag emoji for an ISO country code ("IN" → 🇮🇳). Systems without flag emoji show the two letters instead. */
+export const flag = (iso: string) =>
+  String.fromCodePoint(...[...iso.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65))
+
+/** "+65 6123 4567" → { iso: 'SG', number: '6123 4567' }. Unknown or missing codes use `fallback`. */
+export function splitPhone(phone: string | undefined | null, fallback = 'SG'): { iso: string; number: string } {
+  const p = (phone ?? '').trim()
   if (p.startsWith('+')) {
     const c = byDialLength.find((c) => p.startsWith(c.dial))
     if (c) return { iso: c.iso, number: p.slice(c.dial.length).trim() }
   }
-  return { iso: 'SG', number: p }
+  return { iso: fallback, number: p }
 }
 
 export function joinPhone(iso: string, number: string): string {

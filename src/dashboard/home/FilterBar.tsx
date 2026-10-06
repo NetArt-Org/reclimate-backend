@@ -4,7 +4,7 @@ import { CalendarRange, ChevronDown, MapPin, Network, Search, SlidersHorizontal,
 import { useMemo, useState, type ReactNode } from 'react'
 
 import { OptionRow } from '../components/shell/PageHeader'
-import { Button, Input, Popover, PopoverContent, PopoverTrigger, Segmented, Switch } from '../components/ui'
+import { Button, Input, Popover, PopoverAnchor, PopoverContent, PopoverTrigger, Segmented, Switch } from '../components/ui'
 import { scopedNetworks, vintageYears } from '../data/selectors'
 import { useDashboard } from '../data/store'
 import type { NetworkType, PeriodKind } from '../data/types'
@@ -103,12 +103,17 @@ export function PeriodPicker() {
   const [customOpen, setCustomOpen] = useState(false)
   const p = filters.period
   return (
+    // The row of periods only anchors the popover; it opens for "Custom" alone.
     <Popover open={customOpen} onOpenChange={setCustomOpen}>
-      <PopoverTrigger asChild>
+      <PopoverAnchor asChild>
         <div>
           <Segmented<PeriodKind>
             value={p.kind}
-            onChange={(kind) => (kind === 'custom' ? setCustomOpen(true) : setFilters({ period: { kind } }))}
+            onChange={(kind) => {
+              if (kind === 'custom') return setCustomOpen(true)
+              setCustomOpen(false)
+              setFilters({ period: { kind } })
+            }}
             options={[
               { value: 'all', label: 'All time' },
               { value: 'month', label: 'This month' },
@@ -128,8 +133,8 @@ export function PeriodPicker() {
             ]}
           />
         </div>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-72 p-4">
+      </PopoverAnchor>
+      <PopoverContent align="end" className="w-72 max-w-[calc(100vw-24px)] p-4">
         <CustomRange
           initial={p}
           onApply={(from, to) => {

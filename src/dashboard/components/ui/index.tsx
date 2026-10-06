@@ -255,6 +255,8 @@ export function Tooltip({ content, children, side = 'top' }: { content: React.Re
 
 export const Popover = PopoverPrimitive.Root
 export const PopoverTrigger = PopoverPrimitive.Trigger
+/** Positions a popover next to an element without making that element open it. */
+export const PopoverAnchor = PopoverPrimitive.Anchor
 export function PopoverContent({ className, align = 'start', ...props }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
   return (
     <PopoverPrimitive.Portal>

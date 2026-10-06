@@ -4,12 +4,13 @@ import { Plus, Printer, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
-import { Button, Card, Field, Input, NativeSelect, Spinner } from '../components/ui'
+import { Button, Card, Field, Input, Spinner } from '../components/ui'
 import { unwrap } from '../lib/unwrap'
 import { getCertificateSettings, saveCertificateSettings, type CertificateSettings, type SigningAuthority } from '../server/certificates'
 import { CERTIFICATE_PRINT_CSS, CertificatePreview } from './CertificatePreview'
 import { ImageUpload } from './ImageUpload'
-import { COUNTRIES, joinPhone, splitPhone } from './phone'
+import { CountryCodeSelect } from '../components/ui/CountryCodeSelect'
+import { joinPhone, splitPhone } from '../lib/phone'
 
 /** Id of the certificate form, so the page header's Save button can submit it. */
 export const CERTIFICATE_FORM_ID = 'certificate-settings-form'
@@ -216,18 +217,7 @@ export function CertificateSection({ onSavingChange }: { onSavingChange: (saving
                 Phone *
               </span>
               <div className="flex gap-2" role="group" aria-labelledby="cert-phone-label">
-                <NativeSelect
-                  aria-label="Country code"
-                  className="w-[104px] shrink-0"
-                  value={draft.phoneIso}
-                  onChange={(e) => update({ phoneIso: e.target.value })}
-                >
-                  {COUNTRIES.map((c) => (
-                    <option key={c.iso} value={c.iso}>
-                      {c.iso} {c.dial}
-                    </option>
-                  ))}
-                </NativeSelect>
+                <CountryCodeSelect value={draft.phoneIso} onChange={(iso) => update({ phoneIso: iso })} aria-label="Phone country code" />
                 <Input
                   type="tel"
                   inputMode="tel"
