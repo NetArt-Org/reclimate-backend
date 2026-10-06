@@ -62,7 +62,7 @@ export function CertificatesTab() {
       {list.map((c) => {
         const s = status(c)
         return (
-          <Card key={c.id} className="p-5">
+          <Card key={c.id} className="p-3 sm:p-4">
             <div className="flex flex-wrap items-start gap-4">
               <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
                 <Award className="size-5" />
@@ -84,7 +84,7 @@ export function CertificatesTab() {
                 <Trash2 />
               </Button>
             </div>
-            <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-5">
+            <dl className="mt-5 grid grid-cols-1 gap-4 text-sm sm:grid-cols-2 lg:grid-cols-5">
               <Item label="Company name">{c.companyName}</Item>
               <Item label="Company email">{c.email || '—'}</Item>
               <Item label="Company phone">{c.phone || '—'}</Item>

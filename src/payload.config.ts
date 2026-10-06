@@ -1,72 +1,68 @@
 import { postgresAdapter } from '@payloadcms/db-postgres'
-import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { buildConfig } from 'payload'
 import { fileURLToPath } from 'url'
-import sharp from 'sharp'
 
-import { Batches } from './collections/Batches'
-import { CreditTransactions } from './collections/CreditTransactions'
-import { Media } from './collections/Media'
-import { SellRequests } from './collections/SellRequests'
-import { SetupItems } from './collections/SetupItems'
-import { Sites } from './collections/Sites'
+import { Documents, Sinks, Stocks } from './collections/credits'
+import { BiomassSources, Containers, Kilns, Networks, Organizations, People, Sites, Vehicles } from './collections/network'
+import { Applications, Batches, BiomassCollections, Feedstocks, Inventories, Mixings, Packagings } from './collections/production'
+import { ActivityLogs, Alerts, Files, Templates } from './collections/system'
 import { Users } from './collections/Users'
-import { Settings } from './globals/Settings'
+import { Company } from './globals/Company'
+import { migrations } from './migrations'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
-// The app is a static export running on another origin (browser dev server,
-// capacitor://localhost on iOS, https://localhost on Android).
-const origins = (
-  process.env.CORS_ORIGINS || 'http://localhost:3000,capacitor://localhost,https://localhost'
-)
+// Where this server is reached. Cookie-authenticated writes must come from here (CSRF allow-list).
+// Netlify provides the site's address as URL, so it works there even if SERVER_URL is not set.
+const serverOrigin = (process.env.SERVER_URL || process.env.URL || 'http://localhost:3001').replace(/\/$/, '')
+const origins = (process.env.CORS_ORIGINS || '')
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean)
 
-// Where this server itself is reached. The admin panel's own saves come from
-// here, so it must pass the CSRF check alongside the app's origins.
-// Netlify provides the site's address as URL, so it works there even if SERVER_URL is not set.
-const serverOrigin = (process.env.SERVER_URL || process.env.URL || 'http://localhost:3001').replace(/\/$/, '')
-
+/**
+ * Payload is the headless data + auth layer over Neon. Its built-in admin UI is disabled:
+ * /admin is the Reclimate dashboard in src/app/(dashboard), the only interface.
+ */
 export default buildConfig({
-  admin: {
-    user: Users.slug,
-    importMap: {
-      baseDir: path.resolve(dirname),
-      importMapFile: path.resolve(dirname, 'app/(payload)/cms/importMap.js'),
-    },
-    meta: { titleSuffix: '· Reclimate dMRV' },
-    components: { beforeDashboard: ['/components/BeforeDashboard'] },
-  },
-  // /admin is the Reclimate dashboard (src/app/(dashboard)). Payload's built-in editor stays
-  // reachable at /cms for raw data fixes until every section exists in the dashboard.
-  routes: { admin: '/cms' },
-  collections: [Batches, Media, CreditTransactions, SellRequests, Users, Sites, SetupItems],
-  globals: [Settings],
-  // The app is English + Bahasa Indonesia; request `?locale=all` to get { en, id } pairs.
-  localization: {
-    locales: [
-      { label: 'English', code: 'en' },
-      { label: 'Bahasa Indonesia', code: 'id' },
-    ],
-    defaultLocale: 'en',
-    fallback: true,
-  },
+  admin: { user: Users.slug, disable: true },
+  collections: [
+    Users,
+    Organizations,
+    Networks,
+    Sites,
+    Kilns,
+    People,
+    Vehicles,
+    Containers,
+    BiomassSources,
+    Feedstocks,
+    Batches,
+    BiomassCollections,
+    Mixings,
+    Packagings,
+    Inventories,
+    Applications,
+    Stocks,
+    Sinks,
+    Documents,
+    Templates,
+    Files,
+    Alerts,
+    ActivityLogs,
+  ],
+  globals: [Company],
   cors: origins,
   csrf: [...origins, serverOrigin],
-  editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
-  typescript: {
-    outputFile: path.resolve(dirname, 'payload-types.ts'),
-  },
+  typescript: { outputFile: path.resolve(dirname, 'payload-types.ts') },
   db: postgresAdapter({
-    pool: {
-      connectionString: process.env.DATABASE_URL || '',
-    },
+    pool: { connectionString: process.env.DATABASE_URL || '' },
+    // Schema changes go through committed migrations (src/migrations), in development too.
+    push: false,
+    migrationDir: path.resolve(dirname, 'migrations'),
+    prodMigrations: migrations,
   }),
-  sharp,
-  plugins: [],
 })

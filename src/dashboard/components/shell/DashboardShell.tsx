@@ -3,28 +3,26 @@
 import {
   Bell,
   Building2,
-  Database,
   Leaf,
   LogOut,
   Menu as MenuIcon,
   PanelLeftClose,
   PanelLeftOpen,
-  RotateCcw,
   ShieldAlert,
   X,
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
-import { Toaster, toast } from 'sonner'
+import { Toaster } from 'sonner'
 
 import { outdatedUsers } from '../../data/selectors'
 import { DashboardProvider, useDashboard } from '../../data/store'
+import type { DashboardData } from '../../data/types'
 import { cn } from '../../lib/utils'
 import {
   Avatar,
   Button,
-  ConfirmDialog,
   Menu,
   MenuContent,
   MenuItem,
@@ -37,7 +35,7 @@ import { SessionProvider, useSession, type SessionUser } from './session'
 
 async function logout() {
   try {
-    await fetch('/api/users/logout', { method: 'POST', credentials: 'include' })
+    await fetch('/admin/session', { method: 'DELETE', credentials: 'include' })
   } finally {
     window.location.replace(new URL('/admin/login', window.location.origin).href)
   }
@@ -46,7 +44,7 @@ async function logout() {
 const COLLAPSE_KEY = 'reclimate-admin-sidebar'
 
 /** Sidebar + page area for every admin page. */
-export function DashboardShell({ user, children }: { user: SessionUser; children: ReactNode }) {
+export function DashboardShell({ user, data, children }: { user: SessionUser; data: DashboardData; children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const pathname = usePathname()
@@ -76,12 +74,12 @@ export function DashboardShell({ user, children }: { user: SessionUser; children
   return (
     <SessionProvider user={user}>
       <TooltipProvider>
-        <DashboardProvider>
+        <DashboardProvider initial={data}>
           <div className="flex min-h-screen">
             <aside
               className={cn(
                 'sticky top-0 hidden h-screen shrink-0 border-r border-line bg-surface transition-[width] duration-200 lg:block',
-                collapsed ? 'w-[72px]' : 'w-64',
+                collapsed ? 'w-[64px]' : 'w-60',
               )}
             >
               <Sidebar collapsed={collapsed} onToggle={toggle} />
@@ -101,7 +99,7 @@ export function DashboardShell({ user, children }: { user: SessionUser; children
               </div>
             )}
 
-            <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
               <TopBar onMenu={() => setMobileOpen(true)} />
               <main className="flex min-w-0 flex-1 flex-col">{children}</main>
             </div>
@@ -164,25 +162,20 @@ function Sidebar({
                     href={s.href}
                     aria-current={on ? 'page' : undefined}
                     className={cn(
-                      'flex h-10 items-center gap-3 rounded-xl px-3 text-sm font-medium text-ink-2 transition-colors hover:bg-muted',
+                      'flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium text-ink-2 transition-colors hover:bg-muted',
                       collapsed && 'justify-center px-0',
                       on && 'bg-brand-soft font-semibold text-brand hover:bg-brand-soft',
                     )}
                   >
                     <Icon className="size-[18px] shrink-0" />
                     {!collapsed && <span className="flex-1 truncate">{s.label}</span>}
-                    {!collapsed && s.soon && (
-                      <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-ink-subtle">
-                        Soon
-                      </span>
-                    )}
                   </Link>
                 )
                 return collapsed ? (
                   <Tooltip
                     key={s.href}
                     side="right"
-                    content={s.soon ? `${s.label} · coming soon` : s.label}
+                    content={s.label}
                   >
                     {link}
                   </Tooltip>
@@ -200,7 +193,7 @@ function Sidebar({
           type="button"
           onClick={onToggle}
           className={cn(
-            'flex h-10 cursor-pointer items-center gap-3 rounded-xl px-3 text-sm font-medium text-ink-muted hover:bg-muted hover:text-ink',
+            'flex h-9 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium text-ink-muted hover:bg-muted hover:text-ink',
             collapsed && 'justify-center px-0',
           )}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -219,13 +212,12 @@ function Sidebar({
 
 function TopBar({ onMenu }: { onMenu: () => void }) {
   const { user } = useSession()
-  const { data, resetDemo } = useDashboard()
-  const [confirmReset, setConfirmReset] = useState(false)
+  const { data } = useDashboard()
   const openAlerts =
     data.alerts.filter((a) => a.status === 'open').length + (outdatedUsers(data).length ? 1 : 0)
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-surface/85 px-4 backdrop-blur md:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-line bg-surface/85 px-3 backdrop-blur md:px-6">
       <Button
         variant="ghost"
         size="icon"
@@ -240,7 +232,7 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
         <Tooltip content={openAlerts ? `${openAlerts} things need attention` : 'No alerts'}>
           <Link
             href="/admin#attention"
-            className="relative flex size-10 items-center justify-center rounded-xl text-ink-2 hover:bg-muted"
+            className="relative flex size-9 items-center justify-center rounded-lg text-ink-2 hover:bg-muted"
             aria-label="Alerts"
           >
             <Bell className="size-[18px]" />
@@ -273,29 +265,12 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
                 <Building2 /> Account &amp; company
               </Link>
             </MenuItem>
-            <MenuItem onSelect={() => setConfirmReset(true)}>
-              <RotateCcw /> Reset demo data
-            </MenuItem>
-            <MenuItem onSelect={() => window.open('/cms', '_blank', 'noopener')}>
-              <Database /> Raw data editor
-            </MenuItem>
             <MenuItem onSelect={() => void logout()} className="text-danger [&_svg]:text-danger">
               <LogOut /> Log out
             </MenuItem>
           </MenuContent>
         </Menu>
       </div>
-      <ConfirmDialog
-        open={confirmReset}
-        onOpenChange={setConfirmReset}
-        title="Reset demo data?"
-        message="Everything you added or changed in this browser is replaced with the original sample data."
-        confirmLabel="Reset"
-        onConfirm={() => {
-          resetDemo()
-          toast.success('Demo data restored')
-        }}
-      />
     </header>
   )
 }
@@ -304,7 +279,7 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
 function OrgSwitcher() {
   const { data, filters, setFilters } = useDashboard()
   return (
-    <label className="relative flex h-10 items-center rounded-xl border border-line bg-surface pr-2 pl-3 text-sm hover:border-line-strong">
+    <label className="relative flex h-9 min-w-0 items-center rounded-lg border border-line bg-surface pr-2 pl-3 text-sm hover:border-line-strong">
       <span className="mr-2 hidden text-ink-muted sm:inline">Organisation</span>
       <select
         value={filters.orgId ?? ''}

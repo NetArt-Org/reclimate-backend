@@ -37,14 +37,14 @@ export function Section({
 }) {
   return (
     <Card className={className}>
-      <div className="flex items-start gap-3 border-b border-line px-5 py-4">
+      <div className="flex items-start gap-3 border-b border-line px-3 py-3 sm:px-4">
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold">{title}</h2>
           {description && <p className="mt-0.5 text-sm text-ink-muted">{description}</p>}
         </div>
         {action}
       </div>
-      <div className="p-5">{children}</div>
+      <div className="p-3 sm:p-4">{children}</div>
     </Card>
   )
 }
@@ -238,7 +238,11 @@ export function DocList({
         onChange={async (e) => {
           const files = [...(e.target.files ?? [])]
           e.target.value = ''
-          onChange([...docs, ...(await Promise.all(files.map(readDoc)))])
+          try {
+            onChange([...docs, ...(await Promise.all(files.map(readDoc)))])
+          } catch (err) {
+            toast.error('Could not upload the file', { description: err instanceof Error ? err.message : String(err) })
+          }
         }}
       />
     </>

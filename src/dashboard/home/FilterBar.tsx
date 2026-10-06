@@ -49,12 +49,12 @@ export function FilterBar() {
 
       <Popover>
         <PopoverTrigger asChild>
-          <Button className={cn('rounded-xl', creditRules && 'border-brand text-brand')}>
+          <Button className={cn('max-sm:h-8 max-sm:px-2.5 max-sm:text-xs', creditRules && 'border-brand text-brand')}>
             <SlidersHorizontal />
             Credit rules{creditRules ? ` · ${creditRules}` : ''}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-80 p-4">
+        <PopoverContent className="w-80 max-w-[calc(100vw-24px)] p-4">
           <label className="flex cursor-pointer items-start gap-3">
             <div className="flex-1">
               <div className="text-sm font-semibold">Apply CERES cut-off date</div>
@@ -189,7 +189,7 @@ export function MultiSelect({
         <button
           type="button"
           className={cn(
-            'flex h-10 w-52 cursor-pointer items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm font-medium hover:border-line-strong',
+            'flex h-9 w-[calc(50%-4px)] min-w-0 cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-2.5 text-sm font-medium hover:border-line-strong sm:w-48',
             value.length > 0 && 'border-brand text-brand',
           )}
         >

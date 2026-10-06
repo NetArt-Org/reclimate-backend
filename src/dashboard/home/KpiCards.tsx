@@ -24,11 +24,11 @@ export function KpiCards() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {CARDS.map((c) => {
           const m = cmp.metrics[c.key]
           return (
-            <Card key={c.key} className="flex flex-col p-5">
+            <Card key={c.key} className="flex flex-col p-3 sm:p-4">
               <div className="flex items-center gap-2 text-sm font-medium text-ink-muted">
                 <span className="flex size-8 items-center justify-center rounded-lg [&_svg]:size-4" style={{ background: `${c.color}14`, color: c.color }}>
                   {c.icon}
@@ -66,7 +66,7 @@ export function KpiCards() {
 
 function Stat({ label, value, sub }: { label: string; value: number; sub: string }) {
   return (
-    <div className="px-5 py-4">
+    <div className="px-3 py-3 sm:px-4">
       <div className="text-xs font-medium text-ink-muted">{label}</div>
       <div className="mt-1 flex items-baseline gap-2">
         <span className="text-xl font-bold tabular-nums">{value}</span>

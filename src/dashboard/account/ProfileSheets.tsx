@@ -1,17 +1,15 @@
 'use client'
 
-import { Check, Eye, EyeOff, Loader2, X } from 'lucide-react'
+import { sendPasswordResetEmail } from 'firebase/auth'
+import { Check, Loader2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
 import { useSession } from '../components/shell/session'
-import { Button, Field, Input, NativeSelect, Sheet } from '../components/ui'
-import { cn } from '../lib/utils'
+import { Button, Field, Input, NativeSelect, Sheet, Switch } from '../components/ui'
+import { clientAuth } from '@/lib/firebase/client'
 
-/**
- * These two panels change the signed-in admin's real account in the backend —
- * unlike the rest of the panel, which still uses demo data.
- */
+/** The signed-in admin's own profile (saved to Neon) and password (managed by Firebase). */
 
 const COUNTRIES = [
   { code: '+62', label: 'Indonesia +62' },
@@ -35,7 +33,7 @@ function splitPhone(phone?: string) {
   return c ? { code: c.code, rest: p.slice(c.code.length).trim() } : { code: '+62', rest: p }
 }
 
-async function patchMe(id: number, body: object) {
+async function patchMe(id: number | string, body: object) {
   const res = await fetch(`/api/users/${id}?depth=0`, {
     method: 'PATCH',
     credentials: 'include',
@@ -70,7 +68,7 @@ function EditProfileForm({ onDone }: { onDone: () => void }) {
   const { user, setUser } = useSession()
   const initial = splitPhone(user.phone)
   const [name, setName] = useState(user.name)
-  const [email, setEmail] = useState(user.email ?? '')
+  const [googleSignIn, setGoogleSignIn] = useState(!!user.googleSignIn)
   const [code, setCode] = useState(initial.code)
   const [rest, setRest] = useState(initial.rest)
   const [busy, setBusy] = useState(false)
@@ -84,14 +82,14 @@ function EditProfileForm({ onDone }: { onDone: () => void }) {
       const phone = digits ? `${code} ${rest.trim()}` : ''
       const doc = await patchMe(user.id, {
         name: name.trim(),
-        email: email.trim() || null,
         phone: phone || null,
+        googleSignIn,
       })
       setUser({
         ...user,
         name: doc.name,
-        email: doc.email ?? undefined,
         phone: doc.phone ?? undefined,
+        googleSignIn: !!doc.googleSignIn,
       })
       toast.success('Profile saved')
       onDone()
@@ -113,13 +111,8 @@ function EditProfileForm({ onDone }: { onDone: () => void }) {
           autoComplete="name"
         />
       </Field>
-      <Field label="Email" hint="Used to sign in and for password resets.">
-        <Input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoComplete="email"
-        />
+      <Field label="Email" hint="Your sign-in address. Ask another admin to change it.">
+        <Input type="email" value={user.email ?? ''} disabled className="bg-muted text-ink-muted" />
       </Field>
       <Field label="Phone">
         <div className="flex gap-2">
@@ -145,11 +138,15 @@ function EditProfileForm({ onDone }: { onDone: () => void }) {
           />
         </div>
       </Field>
-      {user.username && (
-        <div className="rounded-xl bg-muted px-3.5 py-3 text-sm text-ink-muted">
-          Username <span className="font-semibold text-ink">{user.username}</span> stays the same.
-        </div>
-      )}
+      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line p-3.5">
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">Allow Google sign-in</span>
+          <span className="mt-0.5 block text-xs text-ink-muted">
+            Sign in with the Google account for {user.email ?? 'this email'}. When off, only your email and password work.
+          </span>
+        </span>
+        <Switch checked={googleSignIn} onCheckedChange={setGoogleSignIn} aria-label="Allow Google sign-in" />
+      </label>
       <div className="mt-2 flex gap-2">
         <Button className="flex-1 rounded-xl" onClick={onDone}>
           Cancel
@@ -176,143 +173,45 @@ export function ChangePasswordSheet({
   )
 }
 
-const RULES = [
-  { test: (p: string) => p.length >= 10, label: 'At least 10 characters' },
-  { test: (p: string) => /[a-z]/i.test(p) && /\d/.test(p), label: 'Letters and numbers' },
-  {
-    test: (p: string) =>
-      !/^(.)\1+$/.test(p) &&
-      !['password', '1234567890', 'qwertyuiop'].some((w) => p.toLowerCase().includes(w)),
-    label: 'Not a common password',
-  },
-]
-
+/** Passwords belong to Firebase: the admin gets a reset link by email instead of typing one here. */
 function ChangePasswordForm({ onDone }: { onDone: () => void }) {
   const { user } = useSession()
-  const [current, setCurrent] = useState('')
-  const [next, setNext] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const passes = RULES.every((r) => r.test(next))
-  const matches = next.length > 0 && next === confirm
+  const [sent, setSent] = useState(false)
 
-  const submit = async (e: FormEvent) => {
-    e.preventDefault()
-    if (!passes || !matches) return
-    if (next === current)
-      return setError('The new password must be different from the current one.')
+  const send = async () => {
+    if (!user.email) return
     setBusy(true)
-    setError(null)
     try {
-      // Confirm the current password first: signing in again with it proves it is right.
-      const login = user.email
-        ? { email: user.email, password: current }
-        : { username: user.username, password: current }
-      const check = await fetch('/api/users/login', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(login),
-      })
-      if (!check.ok) {
-        setError('Current password is not right.')
-        return
-      }
-      await patchMe(user.id, { password: next })
-      toast.success('Password changed')
-      onDone()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not change the password')
+      await sendPasswordResetEmail(clientAuth(), user.email)
+      setSent(true)
+      toast.success('Reset link sent')
+    } catch {
+      toast.error('Could not send the reset link. Try again in a minute.')
     } finally {
       setBusy(false)
     }
   }
 
-  const type = show ? 'text' : 'password'
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4">
-      <Field label="Account">
-        <Input
-          value={user.email ?? user.username ?? ''}
-          disabled
-          className="bg-muted text-ink-muted"
-        />
-      </Field>
-      <Field label="Current password">
-        <Input
-          type={type}
-          required
-          value={current}
-          onChange={(e) => setCurrent(e.target.value)}
-          autoComplete="current-password"
-        />
-      </Field>
-      <Field label="New password">
-        <Input
-          type={type}
-          required
-          value={next}
-          onChange={(e) => setNext(e.target.value)}
-          autoComplete="new-password"
-        />
-      </Field>
-      <ul className="-mt-1 flex flex-col gap-1">
-        {RULES.map((r) => {
-          const ok = r.test(next)
-          return (
-            <li
-              key={r.label}
-              className={cn(
-                'flex items-center gap-1.5 text-xs',
-                ok ? 'text-success' : 'text-ink-muted',
-              )}
-            >
-              {ok ? <Check className="size-3.5" /> : <X className="size-3.5" />} {r.label}
-            </li>
-          )
-        })}
-      </ul>
-      <Field label="Confirm new password">
-        <Input
-          type={type}
-          required
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          autoComplete="new-password"
-          aria-invalid={confirm.length > 0 && !matches}
-        />
-      </Field>
-      {confirm.length > 0 && !matches && (
-        <div className="-mt-2 text-xs text-danger">The two new passwords don&apos;t match.</div>
-      )}
-      <button
-        type="button"
-        onClick={() => setShow((s) => !s)}
-        className="flex w-fit cursor-pointer items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink"
-      >
-        {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}{' '}
-        {show ? 'Hide passwords' : 'Show passwords'}
-      </button>
-      {error && (
-        <div className="rounded-xl bg-danger-soft px-3 py-2.5 text-sm font-semibold text-danger">
-          {error}
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-ink-2">
+        We&apos;ll email a link to <span className="font-semibold">{user.email}</span> where you can choose a new password.
+        If you sign in with Google or Microsoft, change the password with that provider instead.
+      </p>
+      {sent && (
+        <div role="status" className="flex items-center gap-2 rounded-xl bg-success-soft px-3 py-2.5 text-sm font-semibold text-success">
+          <Check className="size-4" /> Check your inbox for the link.
         </div>
       )}
       <div className="mt-2 flex gap-2">
         <Button className="flex-1 rounded-xl" onClick={onDone}>
-          Cancel
+          Close
         </Button>
-        <Button
-          type="submit"
-          variant="primary"
-          className="flex-1 rounded-xl"
-          disabled={busy || !passes || !matches || !current}
-        >
-          {busy ? <Loader2 className="animate-spin" /> : 'Change password'}
+        <Button variant="primary" className="flex-1 rounded-xl" disabled={busy || !user.email} onClick={() => void send()}>
+          {busy ? <Loader2 className="animate-spin" /> : sent ? 'Send again' : 'Email me a reset link'}
         </Button>
       </div>
-    </form>
+    </div>
   )
 }

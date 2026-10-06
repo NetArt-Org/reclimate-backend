@@ -67,13 +67,29 @@ export interface Config {
   };
   blocks: {};
   collections: {
-    batches: Batch;
-    media: Media;
-    'credit-transactions': CreditTransaction;
-    'sell-requests': SellRequest;
     users: User;
+    organizations: Organization;
+    networks: Network;
     sites: Site;
-    'setup-items': SetupItem;
+    kilns: Kiln;
+    people: Person;
+    vehicles: Vehicle;
+    containers: Container;
+    'biomass-sources': BiomassSource;
+    feedstocks: Feedstock;
+    batches: Batch;
+    'biomass-collections': BiomassCollection;
+    mixings: Mixing;
+    packagings: Packaging;
+    inventories: Inventory;
+    applications: Application;
+    stocks: Stock;
+    sinks: Sink;
+    documents: Document;
+    templates: Template;
+    files: File;
+    alerts: Alert;
+    'activity-logs': ActivityLog;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -81,13 +97,29 @@ export interface Config {
   };
   collectionsJoins: {};
   collectionsSelect: {
-    batches: BatchesSelect<false> | BatchesSelect<true>;
-    media: MediaSelect<false> | MediaSelect<true>;
-    'credit-transactions': CreditTransactionsSelect<false> | CreditTransactionsSelect<true>;
-    'sell-requests': SellRequestsSelect<false> | SellRequestsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
+    organizations: OrganizationsSelect<false> | OrganizationsSelect<true>;
+    networks: NetworksSelect<false> | NetworksSelect<true>;
     sites: SitesSelect<false> | SitesSelect<true>;
-    'setup-items': SetupItemsSelect<false> | SetupItemsSelect<true>;
+    kilns: KilnsSelect<false> | KilnsSelect<true>;
+    people: PeopleSelect<false> | PeopleSelect<true>;
+    vehicles: VehiclesSelect<false> | VehiclesSelect<true>;
+    containers: ContainersSelect<false> | ContainersSelect<true>;
+    'biomass-sources': BiomassSourcesSelect<false> | BiomassSourcesSelect<true>;
+    feedstocks: FeedstocksSelect<false> | FeedstocksSelect<true>;
+    batches: BatchesSelect<false> | BatchesSelect<true>;
+    'biomass-collections': BiomassCollectionsSelect<false> | BiomassCollectionsSelect<true>;
+    mixings: MixingsSelect<false> | MixingsSelect<true>;
+    packagings: PackagingsSelect<false> | PackagingsSelect<true>;
+    inventories: InventoriesSelect<false> | InventoriesSelect<true>;
+    applications: ApplicationsSelect<false> | ApplicationsSelect<true>;
+    stocks: StocksSelect<false> | StocksSelect<true>;
+    sinks: SinksSelect<false> | SinksSelect<true>;
+    documents: DocumentsSelect<false> | DocumentsSelect<true>;
+    templates: TemplatesSelect<false> | TemplatesSelect<true>;
+    files: FilesSelect<false> | FilesSelect<true>;
+    alerts: AlertsSelect<false> | AlertsSelect<true>;
+    'activity-logs': ActivityLogsSelect<false> | ActivityLogsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -96,14 +128,14 @@ export interface Config {
   db: {
     defaultIDType: number;
   };
-  fallbackLocale: ('false' | 'none' | 'null') | false | null | ('en' | 'id') | ('en' | 'id')[];
+  fallbackLocale: null;
   globals: {
-    settings: Setting;
+    company: Company;
   };
   globalsSelect: {
-    settings: SettingsSelect<false> | SettingsSelect<true>;
+    company: CompanySelect<false> | CompanySelect<true>;
   };
-  locale: 'en' | 'id';
+  locale: null;
   widgets: {
     collections: CollectionsWidget;
   };
@@ -114,350 +146,759 @@ export interface Config {
   };
 }
 export interface UserAuthOperations {
-  forgotPassword:
-    | {
-        email: string;
-      }
-    | {
-        username: string;
-      };
-  login:
-    | {
-        email: string;
-        password: string;
-      }
-    | {
-        password: string;
-        username: string;
-      };
-  registerFirstUser: {
+  forgotPassword: {
+    email: string;
     password: string;
-    username: string;
-    email?: string;
   };
-  unlock:
-    | {
-        email: string;
-      }
-    | {
-        username: string;
-      };
+  login: {
+    email: string;
+    password: string;
+  };
+  registerFirstUser: {
+    email: string;
+    password: string;
+  };
+  unlock: {
+    email: string;
+    password: string;
+  };
 }
 /**
- * Each batch is one burn, recorded by a worker over 4 days. To review one: open it, check the photos in each Day tab, then set Status to Approved or Rejected and save.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "batches".
- */
-export interface Batch {
-  id: number;
-  /**
-   * e.g. B-2309
-   */
-  code: string;
-  /**
-   * Waiting approval = ready for a supervisor. Approved gives the worker their credits. Rejected sends it back with the reason on the Review tab.
-   */
-  status: 'progress' | 'waiting' | 'approved' | 'rejected' | 'done';
-  /**
-   * Current day 1–4, or 5 once every day is complete.
-   */
-  day: number;
-  /**
-   * Furthest unlocked step within the current day (0-based).
-   */
-  step: number;
-  startedAt?: string | null;
-  worker: number | User;
-  site?: (number | null) | Site;
-  /**
-   * Biochar litres × credit factor (Settings).
-   */
-  credits?: number | null;
-  collect?: {
-    /**
-     * Biomass source or farmer (v.source)
-     */
-    source?: string | null;
-    /**
-     * e.g. Corn Cob (v.btype)
-     */
-    biomassType?: string | null;
-    /**
-     * v.qty
-     */
-    quantity?: number | null;
-    unit?: ('kg' | 'ton') | null;
-    /**
-     * Computed
-     */
-    weightKg?: number | null;
-    transport?: ('manual' | 'vehicle') | null;
-    /**
-     * 2 required (v.bphoto)
-     */
-    photos?: (number | Media)[] | null;
-  };
-  burn?: {
-    /**
-     * v.kiln
-     */
-    kiln?: string | null;
-    /**
-     * 5 readings, each with a photo of the meter. Must be ≤ max moisture (v.moist)
-     */
-    moisture?:
-      | {
-          /**
-           * %
-           */
-          value?: number | null;
-          photo?: (number | null) | Media;
-          id?: string | null;
-        }[]
-      | null;
-    /**
-     * v.burn
-     */
-    startedAt?: string | null;
-    /**
-     * v.burnEnd
-     */
-    endedAt?: string | null;
-    /**
-     * 3 required (v.firePh)
-     */
-    firingPhotos?: (number | Media)[] | null;
-    /**
-     * 3 required, ~5 s each (v.fireVid)
-     */
-    firingVideos?: (number | Media)[] | null;
-    /**
-     * Usually 500–700 °C (v.temp)
-     */
-    temperatureC?: number | null;
-    /**
-     * 1 required (v.preq)
-     */
-    preQuenchPhotos?: (number | Media)[] | null;
-    /**
-     * 1 required (v.quench)
-     */
-    quenchPhotos?: (number | Media)[] | null;
-    /**
-     * v.litres
-     */
-    litres?: number | null;
-  };
-  mix?: {
-    mixType?: ('compost-1-1' | 'biochar-only') | null;
-    /**
-     * Cannot exceed biochar made (v.mixL)
-     */
-    biocharUsedL?: number | null;
-    /**
-     * 2 required (v.mixPh)
-     */
-    photos?: (number | Media)[] | null;
-    /**
-     * v.bag
-     */
-    bagType?: string | null;
-    /**
-     * v.bags
-     */
-    bagCount?: number | null;
-    /**
-     * 1 required (v.packPh)
-     */
-    packPhotos?: (number | Media)[] | null;
-  };
-  apply?: {
-    /**
-     * Farmer or buyer (v.to)
-     */
-    receiver?: string | null;
-    /**
-     * v.giveBags
-     */
-    bagsGiven?: number | null;
-    /**
-     * 2 required (v.applyPh)
-     */
-    photos?: (number | Media)[] | null;
-    latitude?: number | null;
-    longitude?: number | null;
-    /**
-     * As shown in the app (v.loc)
-     */
-    locationLabel?: string | null;
-  };
-  review?: {
-    reviewedBy?: (number | null) | User;
-    reviewedAt?: string | null;
-    /**
-     * Only needed when Status is Rejected. The worker is sent back to redo this step.
-     */
-    rejectReason?: ('quench' | 'fire' | 'video' | 'moist' | 'qty') | null;
-    /**
-     * Optional message shown to the worker.
-     */
-    rejectNote?: string | null;
-  };
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * Everyone who can sign in. Workers and supervisors use the phone app with their phone number and PIN; admins use this panel.
- *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "users".
  */
 export interface User {
   id: number;
   name: string;
-  role: 'admin' | 'supervisor' | 'worker';
-  /**
-   * Where this person works. They only see batches and setup lists of this site.
-   */
-  site?: (number | null) | Site;
-  /**
-   * e.g. +62 812-0000-0000. This is what the person types to sign in to the app (the Username is filled in from it).
-   */
+  email: string;
+  firebaseUid?: string | null;
+  role: 'admin' | 'viewer';
+  googleSignIn?: boolean | null;
   phone?: string | null;
-  village?: string | null;
-  /**
-   * Shown on the Supervisors screen, e.g. "Lead supervisor".
-   */
-  jobTitle?: string | null;
-  avatar?: (number | null) | Media;
-  lang?: ('en' | 'id') | null;
+  photoUrl?: string | null;
+  disabled?: boolean | null;
+  lastSignInAt?: string | null;
   updatedAt: string;
   createdAt: string;
-  email?: string | null;
-  username: string;
-  resetPasswordToken?: string | null;
-  resetPasswordExpiration?: string | null;
-  salt?: string | null;
-  hash?: string | null;
-  resetPasswordRequestedAt?: string | null;
-  loginAttempts?: number | null;
-  lockUntil?: string | null;
-  sessions?:
-    | {
-        id: string;
-        createdAt?: string | null;
-        expiresAt: string;
-      }[]
-    | null;
-  password?: string | null;
   collection: 'users';
 }
 /**
- * Production sites. Every worker, supervisor and batch belongs to one.
- *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organizations".
+ */
+export interface Organization {
+  id: string;
+  code: string;
+  name: string;
+  country?: string | null;
+  address?: string | null;
+  active?: boolean | null;
+  admins?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  standards?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "networks".
+ */
+export interface Network {
+  id: string;
+  organization: string | Organization;
+  code?: string | null;
+  name: string;
+  type: 'artisan' | 'csink';
+  location?: string | null;
+  address?: string | null;
+  country?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  active?: boolean | null;
+  ceresApproved?: boolean | null;
+  methaneStrategy?: string | null;
+  certifiedAt?: string | null;
+  config?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  kml?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "sites".
  */
 export interface Site {
-  id: number;
+  id: string;
+  network: string | Network;
+  code?: string | null;
   name: string;
-  region?: string | null;
+  address?: string | null;
+  lat?: number | null;
+  lng?: number | null;
   active?: boolean | null;
+  kml?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   updatedAt: string;
   createdAt: string;
 }
 /**
- * Everything captured in the app. Open a batch to see its photos in context.
- *
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "media".
+ * via the `definition` "kilns".
  */
-export interface Media {
-  id: number;
-  alt?: string | null;
-  capturedAt?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-  uploadedBy?: (number | null) | User;
-  updatedAt: string;
-  createdAt: string;
-  url?: string | null;
-  thumbnailURL?: string | null;
-  filename?: string | null;
-  mimeType?: string | null;
-  filesize?: number | null;
-  width?: number | null;
-  height?: number | null;
-  focalX?: number | null;
-  focalY?: number | null;
-  sizes?: {
-    thumbnail?: {
-      url?: string | null;
-      width?: number | null;
-      height?: number | null;
-      mimeType?: string | null;
-      filesize?: number | null;
-      filename?: string | null;
-    };
-  };
-}
-/**
- * Every credit earned or sold. Entries are added automatically when a batch is approved or a sell request is paid — you rarely need to add one by hand.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "credit-transactions".
- */
-export interface CreditTransaction {
-  id: number;
-  worker: number | User;
-  type: 'earned' | 'sold' | 'adjustment';
-  /**
-   * Credits. Positive when earned, negative when sold.
-   */
-  amount: number;
-  date: string;
-  title?: string | null;
-  batch?: (number | null) | Batch;
-  sellRequest?: (number | null) | SellRequest;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * Workers ask to sell their credits from the app. Set Status to Paid once the buyer has paid — that takes the credits off the worker's balance.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "sell-requests".
- */
-export interface SellRequest {
-  id: number;
-  worker: number | User;
-  credits: number;
-  pricePerCredit?: number | null;
-  totalValue?: number | null;
-  buyer?: string | null;
-  status: 'pending' | 'accepted' | 'paid' | 'declined';
-  note?: string | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * The choices workers pick from in the app: kilns, biomass sources, farmers, bags, buyers… Filter by Category to see one list.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "setup-items".
- */
-export interface SetupItem {
-  id: number;
-  category:
-    'kilns' | 'sources' | 'farmers' | 'vehicles' | 'bioref' | 'measure' | 'sample' | 'bags' | 'crops' | 'buyers';
+export interface Kiln {
+  id: string;
+  site: string | Site;
+  code?: string | null;
   name: string;
+  type: 'kontiki' | 'pit';
+  volumeM3?: number | null;
+  shape?: string | null;
+  dimensions?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  lat?: number | null;
+  lng?: number | null;
+  active?: boolean | null;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "people".
+ */
+export interface Person {
+  id: string;
+  name: string;
+  role: 'manager' | 'supervisor' | 'operator' | 'farmer';
+  email?: string | null;
+  phone?: string | null;
+  organization?: (string | null) | Organization;
+  networks?: (string | Network)[] | null;
+  sites?: (string | Site)[] | null;
+  active?: boolean | null;
+  otpBypass?: boolean | null;
+  photo?: string | null;
+  trainingDocs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  device?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  address?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "vehicles".
+ */
+export interface Vehicle {
+  id: string;
+  network?: (string | null) | Network;
+  site?: (string | null) | Site;
+  name?: string | null;
+  plate: string;
+  type?: string | null;
+  fuel?: string | null;
+  emissionFactor?: number | null;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "containers".
+ */
+export interface Container {
+  id: string;
+  kind: 'measuring' | 'sampling';
+  site?: (string | null) | Site;
+  network?: (string | null) | Network;
+  code?: string | null;
+  name?: string | null;
+  shape?: string | null;
+  dimensions?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  volumeL?: number | null;
+  inUse?: boolean | null;
+  filled?: boolean | null;
+  addedAt?: string | null;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "biomass-sources".
+ */
+export interface BiomassSource {
+  id: string;
+  site?: (string | null) | Site;
+  network?: (string | null) | Network;
+  name: string;
+  address?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  active?: boolean | null;
+  kml?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "feedstocks".
+ */
+export interface Feedstock {
+  id: string;
+  name: string;
+  strategy?: ('methane' | 'compensation' | 'avoidance') | null;
+  spc?: boolean | null;
   /**
-   * Second line in the app: capacity, phone, plate number, volume…
+   * % of dry biochar mass
    */
-  detail?: string | null;
-  site?: (number | null) | Site;
-  createdBy?: (number | null) | User;
+  carbonContent?: number | null;
+  /**
+   * kg/m³ of biochar
+   */
+  bulkDensity?: number | null;
+  volumeTracking?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "batches".
+ */
+export interface Batch {
+  id: string;
+  code: string;
+  date: string;
+  network: string | Network;
+  site: string | Site;
+  kiln?: (string | null) | Kiln;
+  startDate?: string | null;
+  endedAt?: string | null;
+  feedstock?: string | null;
+  biomassKg?: number | null;
+  biocharL?: number | null;
+  bulkDensity?: number | null;
+  carbonContent?: number | null;
+  csinkT?: number | null;
+  operator?: (string | null) | Person;
+  operatorName?: string | null;
+  status: 'started' | 'not_assessed' | 'approved' | 'admin_approved' | 'rejected' | 'admin_rejected';
+  assessedBy?: string | null;
+  assessorEmail?: string | null;
+  sinkApproved?: boolean | null;
+  registered?: boolean | null;
+  rejectionReason?: string | null;
+  assessedAt?: string | null;
+  temperatureC?: number | null;
+  moistureReadings?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  co2EmissionKg?: number | null;
+  methaneEmissionKg?: number | null;
+  shortTermSinkT?: number | null;
+  kilnVolumeL?: number | null;
+  samplingContainer?: (string | null) | Container;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "biomass-collections".
+ */
+export interface BiomassCollection {
+  id: string;
+  date: string;
+  network: string | Network;
+  site: string | Site;
+  farmer?: (string | null) | Person;
+  feedstock?: string | null;
+  source?: string | null;
+  quantityKg?: number | null;
+  transport?: ('manual' | 'vehicle') | null;
+  vehicle?: (string | null) | Vehicle;
+  vehicleDetails?: string | null;
+  emissionFactor?: number | null;
+  distanceKm?: number | null;
+  emissions?: number | null;
+  biomassSource?: (string | null) | BiomassSource;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "mixings".
+ */
+export interface Mixing {
+  id: string;
+  date: string;
+  batches?: (string | Batch)[] | null;
+  network: string | Network;
+  site: string | Site;
+  mixingType?: string | null;
+  biocharL?: number | null;
+  otherMaterialKg?: number | null;
+  totalKg?: number | null;
+  bagDetails?: string | null;
+  bagsCreated?: number | null;
+  bagsAvailable?: number | null;
+  description?: string | null;
+  rejectedBiocharL?: number | null;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "packagings".
+ */
+export interface Packaging {
+  id: string;
+  date: string;
+  batches?: (string | Batch)[] | null;
+  network: string | Network;
+  site: string | Site;
+  packagingType?: string | null;
+  biocharKg?: number | null;
+  mixKg?: number | null;
+  bagDetails?: string | null;
+  bagsCreated?: number | null;
+  bagsDistributed?: number | null;
+  bagsRemaining?: number | null;
+  description?: string | null;
+  rejectedBiocharL?: number | null;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "inventories".
+ */
+export interface Inventory {
+  id: string;
+  code?: string | null;
+  network?: (string | null) | Network;
+  site?: (string | null) | Site;
+  batches?: (string | Batch)[] | null;
+  packagingType?: string | null;
+  bagType?: string | null;
+  bagQuantity?: number | null;
+  bagUnit?: string | null;
+  actualQuantity?: number | null;
+  packedAt?: string | null;
+  status?: string | null;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "applications".
+ */
+export interface Application {
+  id: string;
+  date: string;
+  network?: (string | null) | Network;
+  site?: (string | null) | Site;
+  recipientName?: string | null;
+  recipientPhone?: string | null;
+  recipientAddress?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  mixTypes?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  mode?: string | null;
+  vehicle?: string | null;
+  kind?: string | null;
+  open?: boolean | null;
+  fullySinked?: boolean | null;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "stocks".
+ */
+export interface Stock {
+  id: string;
+  stockId: string;
+  code?: string | null;
+  network?: (string | null) | Network;
+  feedstock?: string | null;
+  biocharT?: number | null;
+  creditsT?: number | null;
+  producedAt?: string | null;
+  generatedAt?: string | null;
+  partial?: boolean | null;
+  deleted?: boolean | null;
+  carbonContent?: number | null;
+  status?: string | null;
+  certificates?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "sinks".
+ */
+export interface Sink {
+  id: string;
+  sinkId: string;
+  date: string;
+  stock?: (string | null) | Stock;
+  biocharT?: number | null;
+  matrixId?: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  deleted?: boolean | null;
+  reports?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "documents".
+ */
+export interface Document {
+  id: string;
+  title: string;
+  category: 'csi-compliance' | 'certificate' | 'other';
+  reference?: string | null;
+  issuedAt?: string | null;
+  expiresAt?: string | null;
+  file?: (string | null) | File;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "files".
+ */
+export interface File {
+  id: string;
+  name: string;
+  mimeType: string;
+  size?: number | null;
+  storagePath?: string | null;
+  sourcePath?: string | null;
+  category?: string | null;
+  ownerCollection?: string | null;
+  ownerId?: string | null;
+  status?: ('stored' | 'pending' | 'failed') | null;
+  data?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "templates".
+ */
+export interface Template {
+  id: string;
+  kind: 'kiln' | 'container';
+  name: string;
+  kilnType?: ('kontiki' | 'pit') | null;
+  shape: string;
+  unit?: ('mm' | 'cm' | 'm') | null;
+  dimensions:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  volumeL?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "alerts".
+ */
+export interface Alert {
+  id: string;
+  kind: 'bulk-density' | 'certificate' | 'kiln';
+  message: string;
+  network?: (string | null) | Network;
+  request?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  status?: ('open' | 'approved' | 'rejected' | 'dismissed') | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "activity-logs".
+ */
+export interface ActivityLog {
+  id: string;
+  message: string;
+  network?: (string | null) | Network;
+  by?: string | null;
+  actionType?: string | null;
+  at?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -486,32 +927,96 @@ export interface PayloadLockedDocument {
   id: number;
   document?:
     | ({
-        relationTo: 'batches';
-        value: number | Batch;
-      } | null)
-    | ({
-        relationTo: 'media';
-        value: number | Media;
-      } | null)
-    | ({
-        relationTo: 'credit-transactions';
-        value: number | CreditTransaction;
-      } | null)
-    | ({
-        relationTo: 'sell-requests';
-        value: number | SellRequest;
-      } | null)
-    | ({
         relationTo: 'users';
         value: number | User;
       } | null)
     | ({
-        relationTo: 'sites';
-        value: number | Site;
+        relationTo: 'organizations';
+        value: string | Organization;
       } | null)
     | ({
-        relationTo: 'setup-items';
-        value: number | SetupItem;
+        relationTo: 'networks';
+        value: string | Network;
+      } | null)
+    | ({
+        relationTo: 'sites';
+        value: string | Site;
+      } | null)
+    | ({
+        relationTo: 'kilns';
+        value: string | Kiln;
+      } | null)
+    | ({
+        relationTo: 'people';
+        value: string | Person;
+      } | null)
+    | ({
+        relationTo: 'vehicles';
+        value: string | Vehicle;
+      } | null)
+    | ({
+        relationTo: 'containers';
+        value: string | Container;
+      } | null)
+    | ({
+        relationTo: 'biomass-sources';
+        value: string | BiomassSource;
+      } | null)
+    | ({
+        relationTo: 'feedstocks';
+        value: string | Feedstock;
+      } | null)
+    | ({
+        relationTo: 'batches';
+        value: string | Batch;
+      } | null)
+    | ({
+        relationTo: 'biomass-collections';
+        value: string | BiomassCollection;
+      } | null)
+    | ({
+        relationTo: 'mixings';
+        value: string | Mixing;
+      } | null)
+    | ({
+        relationTo: 'packagings';
+        value: string | Packaging;
+      } | null)
+    | ({
+        relationTo: 'inventories';
+        value: string | Inventory;
+      } | null)
+    | ({
+        relationTo: 'applications';
+        value: string | Application;
+      } | null)
+    | ({
+        relationTo: 'stocks';
+        value: string | Stock;
+      } | null)
+    | ({
+        relationTo: 'sinks';
+        value: string | Sink;
+      } | null)
+    | ({
+        relationTo: 'documents';
+        value: string | Document;
+      } | null)
+    | ({
+        relationTo: 'templates';
+        value: string | Template;
+      } | null)
+    | ({
+        relationTo: 'files';
+        value: string | File;
+      } | null)
+    | ({
+        relationTo: 'alerts';
+        value: string | Alert;
+      } | null)
+    | ({
+        relationTo: 'activity-logs';
+        value: string | ActivityLog;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -557,198 +1062,468 @@ export interface PayloadMigration {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "batches_select".
- */
-export interface BatchesSelect<T extends boolean = true> {
-  code?: T;
-  status?: T;
-  day?: T;
-  step?: T;
-  startedAt?: T;
-  worker?: T;
-  site?: T;
-  credits?: T;
-  collect?:
-    | T
-    | {
-        source?: T;
-        biomassType?: T;
-        quantity?: T;
-        unit?: T;
-        weightKg?: T;
-        transport?: T;
-        photos?: T;
-      };
-  burn?:
-    | T
-    | {
-        kiln?: T;
-        moisture?:
-          | T
-          | {
-              value?: T;
-              photo?: T;
-              id?: T;
-            };
-        startedAt?: T;
-        endedAt?: T;
-        firingPhotos?: T;
-        firingVideos?: T;
-        temperatureC?: T;
-        preQuenchPhotos?: T;
-        quenchPhotos?: T;
-        litres?: T;
-      };
-  mix?:
-    | T
-    | {
-        mixType?: T;
-        biocharUsedL?: T;
-        photos?: T;
-        bagType?: T;
-        bagCount?: T;
-        packPhotos?: T;
-      };
-  apply?:
-    | T
-    | {
-        receiver?: T;
-        bagsGiven?: T;
-        photos?: T;
-        latitude?: T;
-        longitude?: T;
-        locationLabel?: T;
-      };
-  review?:
-    | T
-    | {
-        reviewedBy?: T;
-        reviewedAt?: T;
-        rejectReason?: T;
-        rejectNote?: T;
-      };
-  updatedAt?: T;
-  createdAt?: T;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "media_select".
- */
-export interface MediaSelect<T extends boolean = true> {
-  alt?: T;
-  capturedAt?: T;
-  latitude?: T;
-  longitude?: T;
-  uploadedBy?: T;
-  updatedAt?: T;
-  createdAt?: T;
-  url?: T;
-  thumbnailURL?: T;
-  filename?: T;
-  mimeType?: T;
-  filesize?: T;
-  width?: T;
-  height?: T;
-  focalX?: T;
-  focalY?: T;
-  sizes?:
-    | T
-    | {
-        thumbnail?:
-          | T
-          | {
-              url?: T;
-              width?: T;
-              height?: T;
-              mimeType?: T;
-              filesize?: T;
-              filename?: T;
-            };
-      };
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "credit-transactions_select".
- */
-export interface CreditTransactionsSelect<T extends boolean = true> {
-  worker?: T;
-  type?: T;
-  amount?: T;
-  date?: T;
-  title?: T;
-  batch?: T;
-  sellRequest?: T;
-  updatedAt?: T;
-  createdAt?: T;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "sell-requests_select".
- */
-export interface SellRequestsSelect<T extends boolean = true> {
-  worker?: T;
-  credits?: T;
-  pricePerCredit?: T;
-  totalValue?: T;
-  buyer?: T;
-  status?: T;
-  note?: T;
-  updatedAt?: T;
-  createdAt?: T;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
   name?: T;
+  email?: T;
+  firebaseUid?: T;
   role?: T;
-  site?: T;
+  googleSignIn?: T;
   phone?: T;
-  village?: T;
-  jobTitle?: T;
-  avatar?: T;
-  lang?: T;
+  photoUrl?: T;
+  disabled?: T;
+  lastSignInAt?: T;
   updatedAt?: T;
   createdAt?: T;
-  email?: T;
-  username?: T;
-  resetPasswordToken?: T;
-  resetPasswordExpiration?: T;
-  salt?: T;
-  hash?: T;
-  resetPasswordRequestedAt?: T;
-  loginAttempts?: T;
-  lockUntil?: T;
-  sessions?:
-    | T
-    | {
-        id?: T;
-        createdAt?: T;
-        expiresAt?: T;
-      };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organizations_select".
+ */
+export interface OrganizationsSelect<T extends boolean = true> {
+  id?: T;
+  code?: T;
+  name?: T;
+  country?: T;
+  address?: T;
+  active?: T;
+  admins?: T;
+  standards?: T;
+  raw?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "networks_select".
+ */
+export interface NetworksSelect<T extends boolean = true> {
+  id?: T;
+  organization?: T;
+  code?: T;
+  name?: T;
+  type?: T;
+  location?: T;
+  address?: T;
+  country?: T;
+  lat?: T;
+  lng?: T;
+  active?: T;
+  ceresApproved?: T;
+  methaneStrategy?: T;
+  certifiedAt?: T;
+  config?: T;
+  kml?: T;
+  raw?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "sites_select".
  */
 export interface SitesSelect<T extends boolean = true> {
+  id?: T;
+  network?: T;
+  code?: T;
   name?: T;
-  region?: T;
+  address?: T;
+  lat?: T;
+  lng?: T;
   active?: T;
+  kml?: T;
+  raw?: T;
   updatedAt?: T;
   createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "setup-items_select".
+ * via the `definition` "kilns_select".
  */
-export interface SetupItemsSelect<T extends boolean = true> {
-  category?: T;
-  name?: T;
-  detail?: T;
+export interface KilnsSelect<T extends boolean = true> {
+  id?: T;
   site?: T;
-  createdBy?: T;
+  code?: T;
+  name?: T;
+  type?: T;
+  volumeM3?: T;
+  shape?: T;
+  dimensions?: T;
+  lat?: T;
+  lng?: T;
+  active?: T;
+  raw?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "people_select".
+ */
+export interface PeopleSelect<T extends boolean = true> {
+  id?: T;
+  name?: T;
+  role?: T;
+  email?: T;
+  phone?: T;
+  organization?: T;
+  networks?: T;
+  sites?: T;
+  active?: T;
+  otpBypass?: T;
+  photo?: T;
+  trainingDocs?: T;
+  device?: T;
+  address?: T;
+  lat?: T;
+  lng?: T;
+  raw?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "vehicles_select".
+ */
+export interface VehiclesSelect<T extends boolean = true> {
+  id?: T;
+  network?: T;
+  site?: T;
+  name?: T;
+  plate?: T;
+  type?: T;
+  fuel?: T;
+  emissionFactor?: T;
+  raw?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "containers_select".
+ */
+export interface ContainersSelect<T extends boolean = true> {
+  id?: T;
+  kind?: T;
+  site?: T;
+  network?: T;
+  code?: T;
+  name?: T;
+  shape?: T;
+  dimensions?: T;
+  volumeL?: T;
+  inUse?: T;
+  filled?: T;
+  addedAt?: T;
+  raw?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "biomass-sources_select".
+ */
+export interface BiomassSourcesSelect<T extends boolean = true> {
+  id?: T;
+  site?: T;
+  network?: T;
+  name?: T;
+  address?: T;
+  lat?: T;
+  lng?: T;
+  active?: T;
+  kml?: T;
+  raw?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "feedstocks_select".
+ */
+export interface FeedstocksSelect<T extends boolean = true> {
+  id?: T;
+  name?: T;
+  strategy?: T;
+  spc?: T;
+  carbonContent?: T;
+  bulkDensity?: T;
+  volumeTracking?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "batches_select".
+ */
+export interface BatchesSelect<T extends boolean = true> {
+  id?: T;
+  code?: T;
+  date?: T;
+  network?: T;
+  site?: T;
+  kiln?: T;
+  startDate?: T;
+  endedAt?: T;
+  feedstock?: T;
+  biomassKg?: T;
+  biocharL?: T;
+  bulkDensity?: T;
+  carbonContent?: T;
+  csinkT?: T;
+  operator?: T;
+  operatorName?: T;
+  status?: T;
+  assessedBy?: T;
+  assessorEmail?: T;
+  sinkApproved?: T;
+  registered?: T;
+  rejectionReason?: T;
+  assessedAt?: T;
+  temperatureC?: T;
+  moistureReadings?: T;
+  co2EmissionKg?: T;
+  methaneEmissionKg?: T;
+  shortTermSinkT?: T;
+  kilnVolumeL?: T;
+  samplingContainer?: T;
+  raw?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "biomass-collections_select".
+ */
+export interface BiomassCollectionsSelect<T extends boolean = true> {
+  id?: T;
+  date?: T;
+  network?: T;
+  site?: T;
+  farmer?: T;
+  feedstock?: T;
+  source?: T;
+  quantityKg?: T;
+  transport?: T;
+  vehicle?: T;
+  vehicleDetails?: T;
+  emissionFactor?: T;
+  distanceKm?: T;
+  emissions?: T;
+  biomassSource?: T;
+  raw?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "mixings_select".
+ */
+export interface MixingsSelect<T extends boolean = true> {
+  id?: T;
+  date?: T;
+  batches?: T;
+  network?: T;
+  site?: T;
+  mixingType?: T;
+  biocharL?: T;
+  otherMaterialKg?: T;
+  totalKg?: T;
+  bagDetails?: T;
+  bagsCreated?: T;
+  bagsAvailable?: T;
+  description?: T;
+  rejectedBiocharL?: T;
+  raw?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "packagings_select".
+ */
+export interface PackagingsSelect<T extends boolean = true> {
+  id?: T;
+  date?: T;
+  batches?: T;
+  network?: T;
+  site?: T;
+  packagingType?: T;
+  biocharKg?: T;
+  mixKg?: T;
+  bagDetails?: T;
+  bagsCreated?: T;
+  bagsDistributed?: T;
+  bagsRemaining?: T;
+  description?: T;
+  rejectedBiocharL?: T;
+  raw?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "inventories_select".
+ */
+export interface InventoriesSelect<T extends boolean = true> {
+  id?: T;
+  code?: T;
+  network?: T;
+  site?: T;
+  batches?: T;
+  packagingType?: T;
+  bagType?: T;
+  bagQuantity?: T;
+  bagUnit?: T;
+  actualQuantity?: T;
+  packedAt?: T;
+  status?: T;
+  raw?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "applications_select".
+ */
+export interface ApplicationsSelect<T extends boolean = true> {
+  id?: T;
+  date?: T;
+  network?: T;
+  site?: T;
+  recipientName?: T;
+  recipientPhone?: T;
+  recipientAddress?: T;
+  lat?: T;
+  lng?: T;
+  mixTypes?: T;
+  mode?: T;
+  vehicle?: T;
+  kind?: T;
+  open?: T;
+  fullySinked?: T;
+  raw?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "stocks_select".
+ */
+export interface StocksSelect<T extends boolean = true> {
+  id?: T;
+  stockId?: T;
+  code?: T;
+  network?: T;
+  feedstock?: T;
+  biocharT?: T;
+  creditsT?: T;
+  producedAt?: T;
+  generatedAt?: T;
+  partial?: T;
+  deleted?: T;
+  carbonContent?: T;
+  status?: T;
+  certificates?: T;
+  raw?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "sinks_select".
+ */
+export interface SinksSelect<T extends boolean = true> {
+  id?: T;
+  sinkId?: T;
+  date?: T;
+  stock?: T;
+  biocharT?: T;
+  matrixId?: T;
+  status?: T;
+  deleted?: T;
+  reports?: T;
+  raw?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "documents_select".
+ */
+export interface DocumentsSelect<T extends boolean = true> {
+  id?: T;
+  title?: T;
+  category?: T;
+  reference?: T;
+  issuedAt?: T;
+  expiresAt?: T;
+  file?: T;
+  raw?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "templates_select".
+ */
+export interface TemplatesSelect<T extends boolean = true> {
+  id?: T;
+  kind?: T;
+  name?: T;
+  kilnType?: T;
+  shape?: T;
+  unit?: T;
+  dimensions?: T;
+  volumeL?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "files_select".
+ */
+export interface FilesSelect<T extends boolean = true> {
+  id?: T;
+  name?: T;
+  mimeType?: T;
+  size?: T;
+  storagePath?: T;
+  sourcePath?: T;
+  category?: T;
+  ownerCollection?: T;
+  ownerId?: T;
+  status?: T;
+  data?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "alerts_select".
+ */
+export interface AlertsSelect<T extends boolean = true> {
+  id?: T;
+  kind?: T;
+  message?: T;
+  network?: T;
+  request?: T;
+  status?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "activity-logs_select".
+ */
+export interface ActivityLogsSelect<T extends boolean = true> {
+  id?: T;
+  message?: T;
+  network?: T;
+  by?: T;
+  actionType?: T;
+  at?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -793,43 +1568,64 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
   createdAt?: T;
 }
 /**
- * The numbers used to turn biochar into credits. Changes apply to batches saved afterwards.
- *
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "settings".
+ * via the `definition` "company".
  */
-export interface Setting {
+export interface Company {
   id: number;
+  name: string;
+  kind?: string | null;
+  address?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  dmrvProvider?: string | null;
   /**
-   * Credits earned per litre of biochar (CREDIT_FACTOR).
+   * Contacts, documents, services, standards, app rules, projects, certificates, audit trail.
    */
-  creditFactor: number;
-  /**
-   * CREDIT_PRICE
-   */
-  creditPrice: number;
-  /**
-   * Credits needed before a worker can sell (CREDIT_GOAL).
-   */
-  creditGoal: number;
-  /**
-   * Readings above this block the burn (MAX_MOISTURE).
-   */
-  maxMoisture: number;
-  defaultBuyer?: string | null;
+  profile?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  certificateSettings?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  raw?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   updatedAt?: string | null;
   createdAt?: string | null;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "settings_select".
+ * via the `definition` "company_select".
  */
-export interface SettingsSelect<T extends boolean = true> {
-  creditFactor?: T;
-  creditPrice?: T;
-  creditGoal?: T;
-  maxMoisture?: T;
-  defaultBuyer?: T;
+export interface CompanySelect<T extends boolean = true> {
+  name?: T;
+  kind?: T;
+  address?: T;
+  email?: T;
+  phone?: T;
+  dmrvProvider?: T;
+  profile?: T;
+  certificateSettings?: T;
+  raw?: T;
   updatedAt?: T;
   createdAt?: T;
   globalType?: T;

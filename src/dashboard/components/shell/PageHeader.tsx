@@ -9,10 +9,10 @@ import { Tooltip } from '../ui'
 /** Page title row: title, one-line description and page actions. */
 export function PageHeader({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-end gap-x-6 gap-y-3 px-4 pt-6 pb-5 md:px-6">
+    <div className="flex flex-wrap items-end gap-x-4 gap-y-2 px-4 pt-4 pb-3 md:px-6 md:pt-5">
       <div className="min-w-0">
-        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-        {description && <p className="mt-1 text-sm text-ink-muted">{description}</p>}
+        <h1 className="text-xl font-bold tracking-tight">{title}</h1>
+        {description && <p className="mt-0.5 text-[13px] text-ink-muted">{description}</p>}
       </div>
       {actions && <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>}
     </div>

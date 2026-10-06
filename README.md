@@ -1,69 +1,77 @@
-# Reclimate dMRV · Backend
+# Reclimate dMRV · Admin
 
-Payload CMS 3 + Neon Postgres backend for the **Artisan Pro** app (`../reclimate-dmrv`).
-Runs as its own Next.js server: admin panel at `/admin`, REST API at `/api`.
+Next.js 16 admin for Reclimate's biochar dMRV. **Neon Postgres** holds all records; **Firebase** handles sign-in and
+stores files. Payload 3 runs headless as the data and REST layer; its own admin UI is disabled.
+The one interface is `/admin`.
 
 ## First run
 
 ```bash
-cp .env.example .env     # then fill in DATABASE_URL, PAYLOAD_SECRET, SEED_* values
+cp .env.example .env     # DATABASE_URL, PAYLOAD_SECRET, the Firebase values, ADMIN_EMAILS
 npm install
-npm run seed             # creates the tables and the demo data (once)
+npm run migrate          # creates/updates the tables in Neon
 npm run dev              # http://localhost:3001/admin
 ```
 
-`DATABASE_URL` is the **pooled** connection string from the Neon dashboard (Connect → Pooled connection).
-In development Payload creates and updates the tables itself on start-up, so there is no migration step.
-Before a production deploy, run `npm run payload migrate:create` and commit the migration.
+`DATABASE_URL` is the **pooled** connection string from Neon (Connect → Pooled connection).
 
-Sign in to `/admin` with username `admin` and your `SEED_ADMIN_PASSWORD`. The demo worker and
-supervisors sign in from the app with their phone number and `SEED_DEMO_PIN`.
+## Sign-in (Firebase)
 
-To wipe the demo data and start again: `SEED_RESET=true npm run seed`.
+Admins sign in with **email + password**, or with **Google** if they switch on "Allow Google sign-in" in their profile
+(Account → Edit profile). The browser signs in with Firebase and sends the ID token to `/admin/session`, which sets an
+HttpOnly session cookie (5 days). Every request is checked against the Firebase account linked to the `users` row;
+an invited row is linked on first sign-in only when Firebase has verified the email.
+
+- Firebase console → Authentication → Sign-in method: enable **Email/Password** and **Google**.
+- First admin: `npm run admin:create -- you@company.com "Your Name"` prints a set-password link.
+  Or list your Google address in `ADMIN_EMAILS` and sign in with Google once.
+- Everyone else: Settings → Admin access → Invite admin.
+
+## Migrating from Circonomy
+
+1. Export: signed in to admin.circonomy.co, the export script reads every record through their API and saves
+   `circonomy-export.json`; put it in `data/import/` (git-ignored — it contains staff names, phones and emails).
+2. `npm run import:circonomy` — loads it into Neon, keeping Circonomy's ids. Re-runnable: run it again with a newer
+   export to update what changed and add what is new, until the switch-over.
+3. `npm run media:copy` — copies the photos, videos and PDFs into Firebase Storage. The download links in an export
+   expire about 6 days after it was made; export again if copying reports expired links.
+   While testing on the free tier: `MEDIA_SKIP=batches npm run media:copy` (documents, certificates, kiln/container
+   photos) and `MEDIA_ONLY=batches MEDIA_MAX_GB=1.5 npm run media:copy` (newest batches first, capped).
+
+## Schema changes
+
+Tables change only through migrations, in development too (`push` is off):
+
+```bash
+# edit a collection in src/collections, then
+npm run migrate:create <name>    # writes src/migrations/<date>_<name>.ts — commit it
+npm run migrate
+npm run generate:types
+```
+
+In production the migrations run on start-up (`prodMigrations`).
 
 ## Data model
 
-| Collection | What it holds | App screen |
-|---|---|---|
-| `users` | Admins, supervisors, workers. Login = phone digits + PIN | Login, Profile, Supervisors |
-| `sites` | Production sites | Site picker |
-| `setup-items` | Per-site lists: kilns, sources, farmers, vehicles, bags, buyers… | Profile → Site setup |
-| `batches` | One biochar batch; a tab per wizard day + the supervisor's review | Home, Process, Wizard, Review |
-| `media` | Photos and videos (local `./media` folder for now, S3 later) | Camera, profile photo |
-| `credit-transactions` | Credits ledger (earned / sold) | Credits history |
-| `sell-requests` | A worker's request to sell credits | Credits → Sell |
-| `settings` (global) | Credit factor, price, goal, max moisture | — |
+| Collection | Holds |
+|---|---|
+| `organizations` → `networks` → `sites` → `kilns` | Partner orgs (ID01, MY01, STAF), production networks, sites, kilns |
+| `people` | Network staff: managers, supervisors, operators, farmers (they do not sign in here) |
+| `batches` | One kiln firing: quantities, C-sink, assessment, sink and registry status |
+| `biomass-collections`, `mixings`, `packagings` | Field records; mixings/packagings link to their batches |
+| `stocks`, `sinks`, `documents` | Credit ledgers and compliance documents |
+| `feedstocks`, `templates`, `vehicles` | Settings: methane strategy and lab values, kiln/container templates |
+| `files` | Every file's record; the bytes are in Firebase Storage. Served at `/admin/files/<id>` to admins |
+| `alerts`, `activity-logs` | Action Center items and the audit trail |
+| `company` (global) | The C-sink manager's profile, app rules, projects, certificates |
+| `users` | Who may sign in (Firebase), with role |
+| `containers`, `biomass-sources`, `inventories`, `applications` | Measuring/sampling containers, biomass sources, packed inventory, sink applications |
 
-Rules enforced on the server (`src/hooks`, `src/access`):
+Imported records keep their source UUIDs as primary keys, so IDs match the old system.
 
-- Nothing is readable without signing in — including photo and video files.
-- Workers see only their own batches and files; supervisors see their site's; admins see everything.
-- Workers cannot approve or reject a batch, and can only finish one that was approved. A stale save
-  from an offline phone never undoes a supervisor's decision.
-- `collect.weightKg` and `credits` are computed on save and ignored if a client sends them.
-- Role and site can only be changed by an admin. Credit entries can only be written by the server or an admin.
-- Approving a batch writes one "earned" row to the ledger; marking a sell request **paid** writes one "sold" row.
+## Code map
 
-## Sessions and origins
-
-- Login sets an HttpOnly, SameSite=Strict cookie (browser) and returns a token (the mobile app keeps it
-  in the device Keystore/Keychain). Ten wrong PINs lock the account for 10 minutes.
-- `CORS_ORIGINS` lists who may call the API; the same list plus `SERVER_URL` is the CSRF allow-list for
-  cookie sessions. Set `SERVER_URL` when you deploy, or saving in the admin panel will be refused.
-- Uploaded files are stored in `./media` on this server until S3 is connected, so host it somewhere
-  with a persistent disk (not a serverless platform) for now.
-
-## API quick reference
-
-```
-POST /api/users/login            { "username": "<phone digits>", "password": "<PIN>" } → { token, user }
-GET  /api/users/me               Authorization: JWT <token>
-GET  /api/batches?depth=1        the signed-in user's batches
-POST /api/batches                create      PATCH /api/batches/:id   save a wizard step / review
-POST /api/media                  multipart upload (field "file")
-GET  /api/setup-items?where[category][equals]=kilns
-GET  /api/credit-transactions?locale=all&sort=-date
-GET  /api/globals/settings
-```
-
-After changing a collection, run `npm run generate:types` to refresh `src/payload-types.ts`.
+- `src/collections`, `src/globals` — schema; `src/migrations` — migrations
+- `src/dashboard/server` — server-only reads (`load.ts`) and server actions (every write checks for an admin session)
+- `src/dashboard/data/store.tsx` — client store: updates the screen, then saves through a server action
+- `src/dashboard/{home,portfolio,production,networks,account,settings}` — the screens

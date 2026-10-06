@@ -9,6 +9,8 @@ export interface SessionUser {
   username?: string
   email?: string
   phone?: string
+  /** Allowed to sign in with Google (otherwise email + password only). */
+  googleSignIn?: boolean
 }
 
 const Ctx = createContext<{ user: SessionUser; setUser: (u: SessionUser) => void } | null>(null)

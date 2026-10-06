@@ -19,7 +19,7 @@ import { cn, initials } from '../../lib/utils'
 /* ------------------------------------------------------------------ */
 
 const buttonVariants = cva(
-  'inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-full font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
+  'inline-flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
@@ -32,10 +32,10 @@ const buttonVariants = cva(
         'danger-soft': 'bg-danger-soft text-danger hover:bg-danger-soft/70',
       },
       size: {
-        sm: 'h-8 px-3 text-xs',
-        md: 'h-10 px-4 text-sm',
-        lg: 'h-12 px-6 text-sm',
-        icon: 'size-10',
+        sm: 'h-8 px-2.5 text-xs',
+        md: 'h-9 px-3.5 text-sm',
+        lg: 'h-10 px-5 text-sm',
+        icon: 'size-9',
         'icon-sm': 'size-8',
       },
     },
@@ -86,7 +86,7 @@ export function Badge({
 }
 
 export function Card({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('rounded-card border border-line bg-surface', className)} {...props} />
+  return <div className={cn('min-w-0 rounded-card border border-line bg-surface', className)} {...props} />
 }
 
 export const Spinner = ({ className }: { className?: string }) => (
@@ -115,7 +115,7 @@ export function Avatar({ name, src, size = 40, className }: { name: string; src?
 
 export function EmptyState({ icon, title, sub }: { icon: React.ReactNode; title: string; sub?: string }) {
   return (
-    <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
+    <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
       <div className="flex size-12 items-center justify-center rounded-full bg-muted text-ink-muted [&_svg]:size-5">{icon}</div>
       <div className="font-bold">{title}</div>
       {sub && <div className="max-w-xs text-sm text-ink-muted">{sub}</div>}
@@ -130,7 +130,7 @@ export function EmptyState({ icon, title, sub }: { icon: React.ReactNode; title:
 export const Input = ({ className, ...props }: React.ComponentProps<'input'>) => (
   <input
     className={cn(
-      'h-10 w-full rounded-xl border border-line bg-surface px-3 text-sm outline-none placeholder:text-ink-subtle focus:border-brand focus:ring-2 focus:ring-brand/15',
+      'h-9 w-full min-w-0 rounded-lg border border-line bg-surface px-3 text-sm outline-none placeholder:text-ink-subtle focus:border-brand focus:ring-2 focus:ring-brand/15',
       className,
     )}
     {...props}
@@ -140,7 +140,7 @@ export const Input = ({ className, ...props }: React.ComponentProps<'input'>) =>
 export const Textarea = ({ className, ...props }: React.ComponentProps<'textarea'>) => (
   <textarea
     className={cn(
-      'min-h-24 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm outline-none placeholder:text-ink-subtle focus:border-brand focus:ring-2 focus:ring-brand/15',
+      'min-h-24 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none placeholder:text-ink-subtle focus:border-brand focus:ring-2 focus:ring-brand/15',
       className,
     )}
     {...props}
@@ -150,7 +150,7 @@ export const Textarea = ({ className, ...props }: React.ComponentProps<'textarea
 export const NativeSelect = ({ className, ...props }: React.ComponentProps<'select'>) => (
   <select
     className={cn(
-      'h-10 w-full cursor-pointer rounded-xl border border-line bg-surface px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15',
+      'h-9 w-full min-w-0 cursor-pointer rounded-lg border border-line bg-surface px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15',
       className,
     )}
     {...props}
@@ -210,7 +210,7 @@ export function Segmented<T extends string>({
   className?: string
 }) {
   return (
-    <div role="tablist" className={cn('inline-flex rounded-xl border border-line bg-muted p-1', className)}>
+    <div role="tablist" className={cn('inline-flex max-w-full overflow-x-auto rounded-lg border border-line bg-muted p-0.5', className)}>
       {options.map((o) => (
         <button
           key={o.value}
@@ -219,7 +219,7 @@ export function Segmented<T extends string>({
           aria-selected={o.value === value}
           onClick={() => onChange(o.value)}
           className={cn(
-            'cursor-pointer rounded-lg px-3 py-1.5 text-sm font-semibold text-ink-muted transition-colors hover:text-ink',
+            'cursor-pointer whitespace-nowrap rounded-md px-2.5 py-1 text-[13px] font-semibold text-ink-muted transition-colors hover:text-ink',
             o.value === value && 'bg-surface text-brand shadow-sm',
           )}
         >
@@ -261,7 +261,7 @@ export function PopoverContent({ className, align = 'start', ...props }: React.C
       <PopoverPrimitive.Content
         align={align}
         sideOffset={6}
-        className={cn('z-50 animate-in rounded-2xl border border-line bg-surface p-2 shadow-xl outline-none', className)}
+        className={cn('z-50 max-w-[calc(100vw-16px)] animate-in rounded-xl border border-line bg-surface p-1.5 shadow-xl outline-none', className)}
         {...props}
       />
     </PopoverPrimitive.Portal>
@@ -276,7 +276,7 @@ export function MenuContent({ className, align = 'end', ...props }: React.Compon
       <MenuPrimitive.Content
         align={align}
         sideOffset={6}
-        className={cn('z-50 min-w-48 animate-in rounded-2xl border border-line bg-surface p-1.5 shadow-xl', className)}
+        className={cn('z-50 min-w-44 animate-in rounded-xl border border-line bg-surface p-1 shadow-xl', className)}
         {...props}
       />
     </MenuPrimitive.Portal>
@@ -286,7 +286,7 @@ export function MenuItem({ className, ...props }: React.ComponentProps<typeof Me
   return (
     <MenuPrimitive.Item
       className={cn(
-        'flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium outline-none data-[highlighted]:bg-muted [&_svg]:size-4 [&_svg]:text-ink-muted',
+        'flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium outline-none data-[highlighted]:bg-muted [&_svg]:size-4 [&_svg]:text-ink-muted',
         className,
       )}
       {...props}
@@ -318,13 +318,13 @@ export function Modal({
         <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-[2px]" />
         <DialogPrimitive.Content
           className={cn(
-            'fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[calc(100vw-32px)] max-w-lg -translate-x-1/2 -translate-y-1/2 animate-in flex-col rounded-3xl bg-surface shadow-2xl outline-none',
+            'fixed top-1/2 left-1/2 z-50 flex max-h-[90dvh] w-[calc(100vw-24px)] max-w-lg -translate-x-1/2 -translate-y-1/2 animate-in flex-col rounded-2xl bg-surface shadow-2xl outline-none',
             className,
           )}
         >
-          <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-5">
+          <div className="flex items-start justify-between gap-4 border-b border-line px-4 py-3">
             <div>
-              <DialogPrimitive.Title className="text-lg font-bold">{title}</DialogPrimitive.Title>
+              <DialogPrimitive.Title className="text-base font-bold">{title}</DialogPrimitive.Title>
               {description ? (
                 <DialogPrimitive.Description className="mt-0.5 text-sm text-ink-muted">{description}</DialogPrimitive.Description>
               ) : (
@@ -337,8 +337,8 @@ export function Modal({
               </Button>
             </DialogPrimitive.Close>
           </div>
-          <div className="scroll-thin flex-1 overflow-y-auto px-6 py-5">{children}</div>
-          {footer && <div className="flex justify-end gap-2 border-t border-line px-6 py-4">{footer}</div>}
+          <div className="scroll-thin flex-1 overflow-y-auto px-4 py-3">{children}</div>
+          {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-line px-4 py-3">{footer}</div>}
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
@@ -370,11 +370,11 @@ export function Sheet({
         <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-ink/30" />
         <DialogPrimitive.Content
           className={cn(
-            'fixed inset-y-0 right-0 z-50 flex w-full max-w-xl animate-slide-in flex-col bg-surface shadow-2xl outline-none sm:rounded-l-3xl',
+            'fixed inset-y-0 right-0 z-50 flex w-full max-w-lg animate-slide-in flex-col bg-surface shadow-2xl outline-none sm:rounded-l-2xl',
             className,
           )}
         >
-          <div className="flex items-center gap-3 border-b border-line px-6 py-5">
+          <div className="flex items-center gap-3 border-b border-line px-4 py-3">
             {onBack && (
               <Button variant="ghost" size="icon-sm" onClick={onBack} aria-label="Back">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -382,7 +382,7 @@ export function Sheet({
                 </svg>
               </Button>
             )}
-            <DialogPrimitive.Title className="flex-1 text-xl font-bold">{title}</DialogPrimitive.Title>
+            <DialogPrimitive.Title className="min-w-0 flex-1 truncate text-base font-bold">{title}</DialogPrimitive.Title>
             <DialogPrimitive.Description className="sr-only">Details</DialogPrimitive.Description>
             <DialogPrimitive.Close asChild>
               <Button variant="ghost" size="icon-sm" aria-label="Close">
@@ -390,8 +390,8 @@ export function Sheet({
               </Button>
             </DialogPrimitive.Close>
           </div>
-          <div className="scroll-thin flex-1 overflow-y-auto px-6 py-5">{children}</div>
-          {footer && <div className="border-t border-line px-6 py-4">{footer}</div>}
+          <div className="scroll-thin flex-1 overflow-y-auto px-4 py-3">{children}</div>
+          {footer && <div className="border-t border-line px-4 py-3">{footer}</div>}
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

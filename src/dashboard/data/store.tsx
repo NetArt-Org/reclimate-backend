@@ -1,18 +1,22 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { toast } from 'sonner'
 
-import { uid } from '../lib/utils'
+import { unwrap } from '../lib/unwrap'
+import * as server from '../server/actions'
+import type { ActionResult } from '../server/result'
 import { ROLE_ORDER } from './catalog'
-import { createMockData } from './mock'
 import type { Company, DashboardData, DocFile, Filters, Kiln, Network, NetworkConfig, PartnerOrg, Site, User } from './types'
 
 /**
- * Dashboard state for the prototype: mock data kept in this browser, so every
- * add / edit / delete can be tried before the backend is wired up. Each action
- * below becomes one API call (or Payload local-API call) later.
+ * Dashboard state. The data comes from Neon (loaded on the server by the admin layout);
+ * every action updates the screen at once, then saves through a server action.
+ * If a save fails, the error is shown and the data is reloaded from the database.
+ * Only the filters are kept in this browser.
  */
-const STORAGE_KEY = 'reclimate-dashboard-v3'
+const FILTERS_KEY = 'reclimate-dashboard-filters'
 
 export const DEFAULT_FILTERS: Filters = {
   orgId: null,
@@ -24,159 +28,190 @@ export const DEFAULT_FILTERS: Filters = {
   period: { kind: 'all' },
 }
 
-interface Saved {
-  data: DashboardData
-  filters: Filters
-}
+const newId = () => crypto.randomUUID()
 
-function load(): Saved | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as Saved) : null
-  } catch {
-    return null
-  }
-}
-
-function useDashboardState() {
-  const [data, setData] = useState<DashboardData>(createMockData)
+function useDashboardState(initial: DashboardData) {
+  const router = useRouter()
+  const [data, setData] = useState<DashboardData>(initial)
+  const dataRef = useRef(initial)
   const [filters, setFiltersRaw] = useState<Filters>(DEFAULT_FILTERS)
   const [ready, setReady] = useState(false)
 
-  // Restore after mount (the page is server-rendered; localStorage only exists in the browser).
+  // Fresh data from the server (after router.refresh() or a revalidation) replaces the local copy.
   useEffect(() => {
-    const saved = load()
-    /* eslint-disable react-hooks/set-state-in-effect -- one-time restore from browser storage */
-    if (saved) {
-      setData(saved.data)
-      setFiltersRaw({ ...DEFAULT_FILTERS, ...saved.filters })
+    dataRef.current = initial
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing to new server data
+    setData(initial)
+  }, [initial])
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(FILTERS_KEY)
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore of a per-browser preference
+      if (saved) setFiltersRaw({ ...DEFAULT_FILTERS, ...(JSON.parse(saved) as Filters) })
+    } catch {
+      /* storage unavailable */
     }
     setReady(true)
-    /* eslint-enable react-hooks/set-state-in-effect */
   }, [])
 
   useEffect(() => {
     if (!ready) return
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ data, filters } satisfies Saved))
+      localStorage.setItem(FILTERS_KEY, JSON.stringify(filters))
     } catch {
-      /* storage full (large uploads) or unavailable — keep working in memory */
+      /* ignore */
     }
-  }, [data, filters, ready])
+  }, [filters, ready])
 
-  /** Apply a change to a copy of the data. */
-  const mutate = useCallback((recipe: (d: DashboardData) => void) => {
-    setData((cur) => {
-      const next = structuredClone(cur)
+  /** Apply a change on screen, then save it. `save` receives the updated data and returns the server action's result. */
+  const mutate = useCallback(
+    (recipe: (d: DashboardData) => void, save?: (next: DashboardData) => Promise<ActionResult<unknown>>) => {
+      const next = structuredClone(dataRef.current)
       recipe(next)
-      return next
-    })
-  }, [])
+      dataRef.current = next
+      setData(next)
+      // A failed result rejects too, so its message reaches the toast.
+      save?.(next).then(unwrap).catch((err: unknown) => {
+        toast.error('Could not save the change', { description: err instanceof Error ? err.message : String(err) })
+        router.refresh()
+      })
+    },
+    [router],
+  )
 
   const setFilters = useCallback((patch: Partial<Filters> | ((f: Filters) => Partial<Filters>)) => {
     setFiltersRaw((cur) => ({ ...cur, ...(typeof patch === 'function' ? patch(cur) : patch) }))
   }, [])
 
-  const actions = useMemo(
-    () => ({
+  const actions = useMemo(() => {
+    const byId = <T extends { id: string }>(list: T[], id: string) => list.find((x) => x.id === id)
+    const saveNetwork = (id: string) => (d: DashboardData) => server.saveNetwork(byId(d.networks, id)!)
+    const savePerson = (id: string) => (d: DashboardData) => server.savePerson(byId(d.users, id)!)
+
+    return {
       /* ---------- company (C-sink manager) ---------- */
       /** Change the company profile; `log` adds a line to its audit trail. */
       updateCompany: (recipe: (c: Company) => void, log?: { by: string; change: string }) =>
-        mutate((d) => {
-          recipe(d.company)
-          if (log) d.company.audit.unshift({ id: uid('au-'), at: new Date().toISOString(), ...log })
-        }),
+        mutate(
+          (d) => {
+            recipe(d.company)
+            if (log) d.company.audit.unshift({ id: newId(), at: new Date().toISOString(), ...log })
+          },
+          (d) => server.saveCompany(d.company),
+        ),
       updateOrg: (id: string, recipe: (o: PartnerOrg) => void) =>
-        mutate((d) => {
-          const o = d.orgs.find((x) => x.id === id)
-          if (o) recipe(o)
-        }),
+        mutate(
+          (d) => {
+            const o = byId(d.orgs, id)
+            if (o) recipe(o)
+          },
+          (d) => server.saveOrg(byId(d.orgs, id)!),
+        ),
 
       /* ---------- partner organisations & networks ---------- */
-      addOrg: (o: Omit<PartnerOrg, 'id'>) => mutate((d) => void d.orgs.push({ ...o, id: uid('org-') })),
+      addOrg: (o: Omit<PartnerOrg, 'id'>) => {
+        const id = newId()
+        mutate(
+          (d) => void d.orgs.push({ ...o, id }),
+          (d) => server.saveOrg(byId(d.orgs, id)!),
+        )
+        return id
+      },
 
-      addNetwork: (n: Omit<Network, 'id' | 'config'> & { config?: Partial<NetworkConfig> }) => {
-        const id = uid('net-')
-        mutate((d) =>
-          void d.networks.push({
-            ...n,
-            id,
-            config: { feedstocks: [], mixingTypes: [], applicationTypes: [], references: [], ...n.config },
-          }),
+      addNetwork: (x: Omit<Network, 'id' | 'config'> & { config?: Partial<NetworkConfig> }) => {
+        const id = newId()
+        mutate(
+          (d) =>
+            void d.networks.push({
+              ...x,
+              id,
+              config: { feedstocks: [], mixingTypes: [], applicationTypes: [], references: [], ...x.config },
+            }),
+          saveNetwork(id),
         )
         return id
       },
       updateNetwork: (id: string, patch: Partial<Network>) =>
         mutate((d) => {
-          const n = d.networks.find((x) => x.id === id)
-          if (n) Object.assign(n, patch)
-        }),
+          const x = byId(d.networks, id)
+          if (x) Object.assign(x, patch)
+        }, saveNetwork(id)),
       updateConfig: (id: string, config: NetworkConfig) =>
         mutate((d) => {
-          const n = d.networks.find((x) => x.id === id)
-          if (n) n.config = config
-        }),
+          const x = byId(d.networks, id)
+          if (x) x.config = config
+        }, saveNetwork(id)),
 
       updateSite: (id: string, patch: Partial<Site>) =>
-        mutate((d) => {
-          const site = d.sites.find((x) => x.id === id)
-          if (site) Object.assign(site, patch)
-        }),
+        mutate(
+          (d) => {
+            const s = byId(d.sites, id)
+            if (s) Object.assign(s, patch)
+          },
+          (d) => server.saveSite(byId(d.sites, id)!),
+        ),
       updateKiln: (id: string, patch: Partial<Kiln>) =>
-        mutate((d) => {
-          const k = d.kilns.find((x) => x.id === id)
-          if (k) Object.assign(k, patch)
-        }),
+        mutate(
+          (d) => {
+            const k = byId(d.kilns, id)
+            if (k) Object.assign(k, patch)
+          },
+          (d) => server.saveKiln(byId(d.kilns, id)!),
+        ),
 
       /* ---------- people ---------- */
       addUser: (u: Omit<User, 'id' | 'trainingDocs' | 'otpBypass'>) => {
-        const id = uid('u-')
-        mutate((d) => void d.users.push({ ...u, id, otpBypass: false, trainingDocs: [] }))
+        const id = newId()
+        mutate((d) => void d.users.push({ ...u, id, otpBypass: false, trainingDocs: [] }), savePerson(id))
         return id
       },
       updateUser: (id: string, patch: Partial<User>) =>
         mutate((d) => {
-          const u = d.users.find((x) => x.id === id)
+          const u = byId(d.users, id)
           if (u) Object.assign(u, patch)
-        }),
-      deleteUser: (id: string) => mutate((d) => void (d.users = d.users.filter((u) => u.id !== id))),
+        }, savePerson(id)),
+      deleteUser: (id: string) =>
+        mutate(
+          (d) => void (d.users = d.users.filter((u) => u.id !== id)),
+          () => server.deletePerson(id),
+        ),
       promoteUser: (id: string) =>
         mutate((d) => {
-          const u = d.users.find((x) => x.id === id)
+          const u = byId(d.users, id)
           if (!u) return
           const i = ROLE_ORDER.indexOf(u.role)
           if (i < ROLE_ORDER.length - 1) u.role = ROLE_ORDER[i + 1]
-        }),
+        }, savePerson(id)),
       addTrainingDoc: (id: string, doc: DocFile) =>
-        mutate((d) => void d.users.find((x) => x.id === id)?.trainingDocs.push(doc)),
+        mutate((d) => void byId(d.users, id)?.trainingDocs.push(doc), savePerson(id)),
       removeTrainingDoc: (id: string, docId: string) =>
         mutate((d) => {
-          const u = d.users.find((x) => x.id === id)
+          const u = byId(d.users, id)
           if (u) u.trainingDocs = u.trainingDocs.filter((x) => x.id !== docId)
-        }),
+        }, savePerson(id)),
 
       /* ---------- action center ---------- */
       resolveAlert: (id: string, status: 'approved' | 'rejected' | 'dismissed') =>
-        mutate((d) => {
-          const a = d.alerts.find((x) => x.id === id)
-          if (!a) return
-          a.status = status
-          // Approving a bulk-density request updates that network's reference value.
-          if (status === 'approved' && a.request && a.networkId) {
-            const n = d.networks.find((x) => x.id === a.networkId)
-            const ref = n?.config.references.find((x) => x.feedstock === a.request!.feedstock)
-            if (ref) ref.bulkDensity = a.request.bulkDensity
-          }
-          d.logs.unshift({ id: uid('log-'), date: new Date().toISOString(), message: `Alert ${status}: ${a.message}`, networkId: a.networkId })
-        }),
+        mutate(
+          (d) => {
+            const a = byId(d.alerts, id)
+            if (!a) return
+            a.status = status
+            // Approving a bulk-density request updates that network's reference value.
+            if (status === 'approved' && a.request && a.networkId) {
+              const ref = byId(d.networks, a.networkId)?.config.references.find((x) => x.feedstock === a.request!.feedstock)
+              if (ref) ref.bulkDensity = a.request.bulkDensity
+            }
+            d.logs.unshift({ id: newId(), date: new Date().toISOString(), message: `Alert ${status}: ${a.message}`, networkId: a.networkId })
+          },
+          () => server.resolveAlert(id, status),
+        ),
 
-      resetDemo: () => {
-        setData(createMockData())
-        setFiltersRaw(DEFAULT_FILTERS)
-      },
-    }),
-    [mutate],
-  )
+      /** Reload everything from Neon. */
+      reload: () => router.refresh(),
+    }
+  }, [mutate, router])
 
   return { data, filters, setFilters, ready, ...actions }
 }
@@ -185,8 +220,8 @@ export type DashboardStore = ReturnType<typeof useDashboardState>
 
 const Ctx = createContext<DashboardStore | null>(null)
 
-export function DashboardProvider({ children }: { children: ReactNode }) {
-  const store = useDashboardState()
+export function DashboardProvider({ initial, children }: { initial: DashboardData; children: ReactNode }) {
+  const store = useDashboardState(initial)
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>
 }
 

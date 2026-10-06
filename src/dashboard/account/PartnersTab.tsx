@@ -26,7 +26,7 @@ export function PartnersTab() {
   const org = data.orgs.find((o) => o.id === selectedId) ?? data.orgs[0]
 
   return (
-    <div className="grid items-start gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
       <Card className="p-1.5">
         {data.orgs.map((o) => (
           <button
@@ -65,7 +65,7 @@ export function PartnersTab() {
 
       {org && (
         <div className="flex min-w-0 flex-col gap-5">
-          <Card className="flex flex-wrap items-center gap-4 p-5">
+          <Card className="flex flex-wrap items-center gap-4 p-3 sm:p-4">
             <Avatar name={org.name} size={56} />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -91,7 +91,7 @@ export function PartnersTab() {
             </label>
           </Card>
 
-          <div className="grid items-start gap-5 xl:grid-cols-2">
+          <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
             <Section title="Admins" description="Manage this organisation's networks and people.">
               <ContactList
                 contacts={org.admins ?? []}

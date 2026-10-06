@@ -1,6 +1,7 @@
 'use client'
 
-import { Bell, CircleCheck, Info, Smartphone, TriangleAlert } from 'lucide-react'
+import { Bell, CircleCheck, FlaskConical, Info, Smartphone, TriangleAlert } from 'lucide-react'
+import Link from 'next/link'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -11,7 +12,7 @@ import { useDashboard } from '../data/store'
 import type { Alert } from '../data/types'
 import { cn, day } from '../lib/utils'
 
-const ICON: Record<Alert['kind'], typeof Info> = { 'bulk-density': Info, certificate: TriangleAlert, kiln: TriangleAlert }
+const ICON: Record<Alert['kind'], typeof Info> = { 'bulk-density': Info, certificate: TriangleAlert, kiln: TriangleAlert, sampling: FlaskConical }
 
 /** Things that need someone's attention, and a log of what happened. */
 export function ActionCenter() {
@@ -27,7 +28,7 @@ export function ActionCenter() {
   const alertCount = alerts.length + (outdated.length ? 1 : 0)
 
   return (
-    <Card id="attention" className="flex max-h-[430px] scroll-mt-24 flex-col p-5">
+    <Card id="attention" className="flex max-h-[430px] scroll-mt-24 flex-col p-3 sm:p-4">
       <div className="flex items-center gap-2.5">
         <Bell className="size-4 text-ink-muted" />
         <h2 className="text-base font-semibold">Needs attention</h2>
@@ -96,6 +97,14 @@ export function ActionCenter() {
                               Reject
                             </Button>
                           </>
+                        ) : a.kind === 'sampling' ? (
+                          // Computed from the container itself: it clears once the sample is sent and the container is updated.
+                          <Link
+                            href="/admin/networks"
+                            className="inline-flex h-8 items-center rounded-full border border-line px-3 text-xs font-semibold hover:bg-muted"
+                          >
+                            View containers
+                          </Link>
                         ) : (
                           <Button size="sm" onClick={() => resolveAlert(a.id, 'dismissed')}>
                             Dismiss

@@ -39,9 +39,8 @@ import {
 } from '../components/ui'
 import {
   APPLICATION_TYPES,
-  FEEDSTOCKS,
   MIXING_TYPES,
-  REFERENCE_DEFAULTS,
+  referenceDefaults,
   REGISTRIES,
 } from '../data/catalog'
 import { useDashboard } from '../data/store'
@@ -68,7 +67,7 @@ export function CompanyTab() {
     updateCompany(recipe, change ? { by: user.name, change } : undefined)
 
   return (
-    <div className="grid items-start gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
       {/* ================= left: company, people, documents ================= */}
       <div className="flex flex-col gap-5">
         <Section
@@ -340,7 +339,7 @@ function FeedstockPortfolio() {
   const list = data.company.feedstocks
   const set = (recipe: (c: Company) => void, change: string) =>
     updateCompany(recipe, { by: user.name, change })
-  const missing = FEEDSTOCKS.filter((f) => !list.some((x) => x.name === f))
+  const missing = data.feedstocks.map((f) => f.name).filter((f) => !list.some((x) => x.name === f))
 
   return (
     <Section
@@ -372,7 +371,7 @@ function FeedstockPortfolio() {
         </Popover>
       }
     >
-      <div className="grid gap-2.5 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
         {list.map((f) => {
           const s = f.strategy ? STRATEGY[f.strategy] : null
           const update = (patch: Partial<typeof f>, change: string) =>
@@ -541,6 +540,7 @@ export function References({
   onChange: (r: FeedstockReference[]) => void
   feedstocks: string[]
 }) {
+  const { data } = useDashboard()
   const missing = feedstocks.filter((f) => !rows.some((r) => r.feedstock === f))
   const edit = (i: number, k: 'bulkDensity' | 'moisture' | 'carbonContent', v: string) =>
     onChange(rows.map((r, j) => (j === i ? { ...r, [k]: Number(v) } : r)))
@@ -605,7 +605,7 @@ export function References({
                   ...rows,
                   {
                     feedstock: f,
-                    ...(REFERENCE_DEFAULTS[f] ?? { bulkDensity: 0, moisture: 0, carbonContent: 0 }),
+                    ...referenceDefaults(data.feedstocks, f),
                   },
                 ])
               }

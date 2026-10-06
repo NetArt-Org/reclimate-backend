@@ -1,6 +1,6 @@
 /**
- * Dashboard data model. Shaped so each type maps onto a Payload collection
- * later (orgs, networks, sites, kilns, users, production, alerts, logs).
+ * Dashboard data model, loaded from Neon by src/dashboard/server/load.ts.
+ * Each entity maps onto a Payload collection (organizations, networks, sites, kilns, people, …).
  */
 
 export type NetworkType = 'artisan' | 'csink'
@@ -19,6 +19,7 @@ export interface PartnerOrg {
   id: string
   name: string
   code: string
+  country?: string
   active: boolean
   address?: string
   admins?: Contact[]
@@ -80,6 +81,8 @@ export interface AuditEntry {
 export interface Company {
   name: string
   kind: string
+  /** Digital MRV provider the credits are verified through (e.g. Circonomy). */
+  dmrvProvider?: string
   address: string
   email: string
   phone: string
@@ -108,7 +111,7 @@ export interface DocFile {
   name: string
   size: number
   type: string
-  /** Small images are kept as data URLs so they survive a reload. */
+  /** /admin/files/<id> — the file is stored in Neon. */
   url?: string
   addedAt: string
 }
@@ -125,7 +128,7 @@ export interface FeedstockReference {
   /** kg/m³ */
   bulkDensity: number
   /** % */
-  moisture: number
+  moisture?: number
   /** % */
   carbonContent: number
 }
@@ -151,11 +154,14 @@ export interface KmlBoundary {
 export interface Network {
   id: string
   orgId: string
+  /** e.g. ID01-P03: organisation + project number used in batch IDs */
+  code?: string
   type: NetworkType
   name: string
   location: string
-  lat: number
-  lng: number
+  /** Not every imported network has a known location. */
+  lat: number | null
+  lng: number | null
   active: boolean
   /** Approved under the CERES certificate. */
   ceresApproved: boolean
@@ -169,8 +175,9 @@ export interface Site {
   id: string
   networkId: string
   name: string
-  lat: number
-  lng: number
+  code?: string
+  lat: number | null
+  lng: number | null
   active: boolean
 }
 
@@ -178,8 +185,11 @@ export interface Kiln {
   id: string
   siteId: string
   name: string
-  lat: number
-  lng: number
+  code?: string
+  type: 'kontiki' | 'pit'
+  volumeM3?: number
+  lat: number | null
+  lng: number | null
   active: boolean
 }
 
@@ -226,11 +236,12 @@ export interface Production {
 
 export interface Alert {
   id: string
-  kind: 'bulk-density' | 'certificate' | 'kiln'
+  /** sampling: a sampling container has been kept 6 months (computed, not stored). */
+  kind: 'bulk-density' | 'certificate' | 'kiln' | 'sampling'
   message: string
   date: string
   networkId?: string
-  /** For bulk-density requests: the change being asked for. */
+  /** For bulk-density requests: the change being asked for (kg/m³). */
   request?: { feedstock: string; bulkDensity: number; by: string }
   status: 'open' | 'approved' | 'rejected' | 'dismissed'
 }
@@ -242,8 +253,42 @@ export interface LogEntry {
   networkId?: string
 }
 
+/** A feedstock and how its baseline methane is treated (Settings → Feedstock management). */
+export interface Feedstock {
+  id: string
+  name: string
+  strategy: 'methane' | 'compensation' | 'avoidance' | null
+  spc: boolean
+  /** kg/m³ */
+  bulkDensity: number | null
+  /** % */
+  carbonContent: number | null
+  volumeTracking: boolean
+}
+
+/** Where a batch's carbon stands, from field record to registry. */
+export type CreditBucket =
+  | 'registered'
+  | 'pendingCirconomy'
+  | 'pendingCeres'
+  | 'pendingSink'
+  | 'sinkRejected'
+  | 'compensated'
+  | 'lost'
+
+/** Carbon per network/site/month/status bucket (summed from batches). */
+export interface PortfolioRow {
+  networkId: string
+  siteId: string
+  month: string
+  bucket: CreditBucket
+  co2T: number
+}
+
 export interface DashboardData {
   company: Company
+  feedstocks: Feedstock[]
+  portfolio: PortfolioRow[]
   orgs: PartnerOrg[]
   networks: Network[]
   sites: Site[]

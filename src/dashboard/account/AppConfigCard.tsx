@@ -58,7 +58,7 @@ export function AppConfigCard() {
 
   return (
     <div className="rounded-card border border-line bg-surface">
-      <div className="flex flex-wrap items-start gap-3 border-b border-line px-5 py-4">
+      <div className="flex flex-wrap items-start gap-3 border-b border-line px-3 py-3 sm:px-4">
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold">Field app settings</h2>
           <p className="mt-0.5 text-sm text-ink-muted">
@@ -76,7 +76,7 @@ export function AppConfigCard() {
         </Button>
       </div>
 
-      <div className="p-5">
+      <div className="p-3 sm:p-4">
         {pending && (
           <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-warn/30 bg-warn-soft px-4 py-3">
             <Clock className="size-4 text-warn" />
@@ -113,7 +113,7 @@ export function AppConfigCard() {
           }))}
         />
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="rounded-xl border border-line p-4">
             <Heading icon={<Droplets />}>Sensor readings</Heading>
             <Sensor
@@ -447,7 +447,7 @@ function ConfigForm({
           </div>
         </div>
       </fieldset>
-      <div className="sticky bottom-0 -mx-6 mt-2 flex gap-2 border-t border-line bg-surface px-6 py-4">
+      <div className="sticky bottom-0 -mx-4 mt-2 flex gap-2 border-t border-line bg-surface px-4 py-3">
         <Button className="flex-1 rounded-xl" onClick={onCancel}>
           Cancel
         </Button>

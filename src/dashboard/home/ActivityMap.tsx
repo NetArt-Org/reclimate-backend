@@ -34,7 +34,10 @@ export function ActivityMap() {
   const siteIds = new Set(sites.map((s) => s.id))
   const netIds = new Set(networks.map((n) => n.id))
 
-  const all: MapPoint[] = [
+  type Maybe = Omit<MapPoint, 'lat' | 'lng'> & { lat: number | null | undefined; lng: number | null | undefined }
+  const located = (p: Maybe): p is MapPoint => p.lat != null && p.lng != null
+  // Places without known coordinates are left off the map.
+  const all: MapPoint[] = ([
     ...networks.map((n) => ({ id: n.id, kind: n.type, lat: n.lat, lng: n.lng, label: n.name, sub: n.location, active: n.active })),
     ...sites.map((s) => ({ id: s.id, kind: 'site' as const, lat: s.lat, lng: s.lng, label: s.name, sub: 'Site', active: s.active })),
     ...data.kilns
@@ -43,12 +46,12 @@ export function ActivityMap() {
     ...data.users
       .filter((u) => u.role === 'farmer' && u.lat != null && u.networkIds.some((id) => netIds.has(id)))
       .map((u) => ({ id: u.id, kind: 'farmer' as const, lat: u.lat!, lng: u.lng!, label: u.name, sub: 'Farmer', active: u.active })),
-  ]
+  ] as Maybe[]).filter(located)
   const counts = Object.fromEntries(LAYERS.map((l) => [l.key, all.filter((p) => p.kind === l.key).length])) as Record<Layer, number>
   const points = all.filter((p) => layers.includes(p.kind))
 
   return (
-    <Card className="p-5">
+    <Card className="p-3 sm:p-4">
       <div className="flex flex-wrap items-center gap-3">
         <Globe2 className="size-4 text-ink-muted" />
         <h2 className="text-base font-semibold">Where the work happens</h2>

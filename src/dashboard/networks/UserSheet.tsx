@@ -51,7 +51,7 @@ function UserDetail({ user: u, onDeleted }: { user: User; onDeleted: () => void 
   return (
     <div className="flex flex-col gap-4">
       {/* ---- identity ---- */}
-      <section className="rounded-card border border-line p-5">
+      <section className="rounded-card border border-line p-3 sm:p-4">
         <div className="flex items-start gap-4">
           <button type="button" onClick={() => photo.current?.click()} className="group relative cursor-pointer rounded-full" aria-label="Change photo">
             <Avatar name={u.name} src={u.photo} size={72} />
@@ -68,9 +68,13 @@ function UserDetail({ user: u, onDeleted }: { user: User; onDeleted: () => void 
               const f = e.target.files?.[0]
               e.target.value = ''
               if (!f) return
-              const doc = await readDoc(f)
-              if (!doc.url) return toast.error('Please pick an image under 1.5 MB')
-              updateUser(u.id, { photo: doc.url })
+              try {
+                const doc = await readDoc(f)
+                if (!doc.url) return toast.error('Please pick an image under 4 MB')
+                updateUser(u.id, { photo: doc.url })
+              } catch (err) {
+                toast.error('Could not upload the photo', { description: err instanceof Error ? err.message : String(err) })
+              }
             }}
           />
           <div className="min-w-0 flex-1">
@@ -172,7 +176,11 @@ function UserDetail({ user: u, onDeleted }: { user: User; onDeleted: () => void 
           onChange={async (e) => {
             const files = [...(e.target.files ?? [])]
             e.target.value = ''
-            for (const f of files) addTrainingDoc(u.id, await readDoc(f))
+            try {
+              for (const f of files) addTrainingDoc(u.id, await readDoc(f))
+            } catch (err) {
+              toast.error('Could not upload the document', { description: err instanceof Error ? err.message : String(err) })
+            }
           }}
         />
         <div className="p-4">

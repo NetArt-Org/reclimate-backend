@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { Button, Card, EmptyState, Segmented } from '../components/ui'
-import { monthRange, weekRange } from '../data/mock'
+import { monthRange, weekRange } from '../lib/dates'
 import { timeSeries, type Grain } from '../data/selectors'
 import { useDashboard } from '../data/store'
 import { num } from '../lib/utils'
@@ -73,7 +73,7 @@ export function ProductionChart() {
   const twoAxes = metric === 'all'
 
   return (
-    <Card className="flex flex-col p-5">
+    <Card className="flex flex-col p-3 sm:p-4">
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-semibold">Production growth</h2>

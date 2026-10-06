@@ -1,6 +1,6 @@
 import { LATEST_APP_VERSION } from './catalog'
-import { monthRange } from './mock'
-import type { DashboardData, Filters, Network, Production } from './types'
+import { monthRange } from '../lib/dates'
+import type { CreditBucket, DashboardData, Filters, Network, Production } from './types'
 import { versionLess } from '../lib/utils'
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -154,3 +154,42 @@ export function comparison(data: DashboardData, f: Filters) {
   return { metrics: out, label: f.period.kind === 'all' ? 'last 12 months vs previous 12' : f.period.kind === 'month' ? 'vs last month' : 'vs previous period' }
 }
 
+
+export const BUCKETS: CreditBucket[] = [
+  'registered',
+  'pendingCirconomy',
+  'pendingCeres',
+  'pendingSink',
+  'sinkRejected',
+  'compensated',
+  'lost',
+]
+
+/**
+ * Carbon (t CO₂e) per credit bucket and per network, for the Projects portfolio.
+ * Applies every Overview filter: organisation, type, networks, sites, period, vintage and cut-off.
+ */
+export function portfolioSummary(data: DashboardData, f: Filters) {
+  const nets = new Map(data.networks.map((n) => [n.id, n]))
+  const siteIds = new Set(selectedSites(data, f).map((s) => s.id))
+  const zero = () => Object.fromEntries(BUCKETS.map((b) => [b, 0])) as Record<CreditBucket, number>
+  const totals = zero()
+  const byNetwork = new Map<string, Record<CreditBucket, number>>()
+  for (const r of data.portfolio) {
+    if (!siteIds.has(r.siteId) || !inPeriod(r.month, f)) continue
+    if (f.vintages.length && !f.vintages.includes(Number(r.month.slice(0, 4)))) continue
+    if (f.cutoff) {
+      const certified = nets.get(r.networkId)?.certifiedAt
+      if (!certified || r.month < certified.slice(0, 7)) continue
+    }
+    totals[r.bucket] += r.co2T
+    const row = byNetwork.get(r.networkId) ?? zero()
+    row[r.bucket] += r.co2T
+    byNetwork.set(r.networkId, row)
+  }
+  const networks = selectedNetworks(data, f)
+    .map((n) => ({ network: n, buckets: byNetwork.get(n.id) ?? zero() }))
+    .map((x) => ({ ...x, total: BUCKETS.reduce((a, b) => a + x.buckets[b], 0) }))
+    .sort((a, b) => b.total - a.total)
+  return { totals, networks }
+}

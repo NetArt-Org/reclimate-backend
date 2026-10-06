@@ -5,7 +5,7 @@ import { useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import { Button, Checkbox, Input, Segmented, Sheet, Textarea } from '../components/ui'
-import { APPLICATION_TYPES, FEEDSTOCKS, MIXING_TYPES, REFERENCE_DEFAULTS } from '../data/catalog'
+import { APPLICATION_TYPES, MIXING_TYPES, referenceDefaults } from '../data/catalog'
 import { useDashboard } from '../data/store'
 import type { Network, NetworkConfig, PreprocessStep } from '../data/types'
 import { fileSize, readDoc } from '../lib/files'
@@ -24,7 +24,8 @@ export function EditConfigSheet({ network, open, onOpenChange }: { network: Netw
 }
 
 function Editor({ network, onDone }: { network: Network; onDone: () => void }) {
-  const { updateConfig } = useDashboard()
+  const { data, updateConfig } = useDashboard()
+  const FEEDSTOCKS = data.feedstocks.map((f) => f.name)
   const [draft, setDraft] = useState<NetworkConfig>(() => structuredClone(network.config))
   const [view, setView] = useState<View>('main')
   const dirty = JSON.stringify(draft) !== JSON.stringify(network.config)
@@ -35,7 +36,7 @@ function Editor({ network, onDone }: { network: Network; onDone: () => void }) {
       const next = { ...d, [key]: list }
       // A newly assigned feedstock gets typical reference values to start from.
       if (key === 'feedstocks' && !d.references.some((r) => r.feedstock === item) && list.includes(item)) {
-        next.references = [...d.references, { feedstock: item, ...REFERENCE_DEFAULTS[item] }]
+        next.references = [...d.references, { feedstock: item, ...referenceDefaults(data.feedstocks, item) }]
       }
       return next
     })
@@ -54,14 +55,14 @@ function Editor({ network, onDone }: { network: Network; onDone: () => void }) {
   if (view === 'reference') return <ReferenceView draft={draft} setDraft={setDraft} onBack={() => setView('main')} />
 
   return (
-    <div className="-mx-6 -my-5 flex min-h-full flex-col">
+    <div className="-mx-4 -my-3 flex min-h-full flex-col">
       <div className="px-6 pt-1 pb-5">
         <div className="text-xl font-bold">{network.name}</div>
         <div className="mt-0.5 text-sm text-ink-muted">Configuration</div>
       </div>
       <div className="flex-1 px-6">
         <Section label="Assigned feedstocks">
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {FEEDSTOCKS.map((f) => {
               const on = draft.feedstocks.includes(f)
               return (
@@ -120,7 +121,7 @@ function Editor({ network, onDone }: { network: Network; onDone: () => void }) {
           </div>
         </Section>
       </div>
-      <div className="sticky bottom-0 mt-6 border-t border-line bg-surface px-6 py-4">
+      <div className="sticky bottom-0 mt-6 border-t border-line bg-surface px-4 py-3">
         <Button variant="dark" size="lg" className="w-full rounded-2xl" onClick={save} disabled={!dirty}>
           <Save /> {dirty ? 'Save configuration' : 'No changes'}
         </Button>
@@ -221,11 +222,15 @@ function PreprocessView({
           onChange={async (e) => {
             const files = [...(e.target.files ?? [])]
             e.target.value = ''
-            const docs = await Promise.all(files.map(readDoc))
-            set({ documents: [...s.documents, ...docs] })
+            try {
+              const docs = await Promise.all(files.map(readDoc))
+              set({ documents: [...s.documents, ...docs] })
+            } catch (err) {
+              toast.error('Could not upload the document', { description: err instanceof Error ? err.message : String(err) })
+            }
           }}
         />
-        <div className="mt-1.5 text-xs font-semibold text-info">Accepted: PDF, JPEG, JPG, PNG, DOC and DOCX.</div>
+        <div className="mt-1.5 text-xs font-semibold text-info">Accepted: PDF, JPEG, JPG, PNG, DOC and DOCX, up to 4 MB each.</div>
         <div className="mt-3 flex flex-col gap-2">
           {s.documents.map((d) => (
             <div key={d.id} className="flex items-center gap-3 rounded-xl border border-line px-3 py-2">
@@ -347,12 +352,12 @@ function DrillRow({ icon, tone, title, sub, onClick }: { icon: ReactNode; tone: 
   )
 }
 
-function NumberField({ label, unit, value, onChange }: { label: string; unit: string; value: number; onChange: (v: string) => void }) {
+function NumberField({ label, unit, value, onChange }: { label: string; unit: string; value: number | undefined; onChange: (v: string) => void }) {
   return (
     <label className="flex flex-col gap-1">
       <span className="text-xs font-semibold text-ink-muted">{label}</span>
       <div className="relative">
-        <Input type="number" inputMode="decimal" min={0} value={Number.isFinite(value) ? value : ''} onChange={(e) => onChange(e.target.value)} className="pr-14" />
+        <Input type="number" inputMode="decimal" min={0} value={value != null && Number.isFinite(value) ? value : ''} onChange={(e) => onChange(e.target.value)} className="pr-14" />
         <span className="absolute top-1/2 right-3 -translate-y-1/2 text-xs text-ink-subtle">{unit}</span>
       </div>
     </label>

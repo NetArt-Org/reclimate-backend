@@ -40,7 +40,7 @@
   --color-flame-soft: #fff1e6;
   --color-teal: #1b8a8a;
 
-  --radius-card: 1rem;
+  --radius-card: 0.75rem;
 
   --animate-in: fade-in 0.18s ease-out;
   --animate-slide-in: slide-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);

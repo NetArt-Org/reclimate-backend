@@ -1,128 +1,83 @@
-import type { Access, CollectionConfig, FieldAccess, Where } from 'payload'
+import type { AuthStrategy, CollectionConfig } from 'payload'
 
-import { isAdmin, isAdminField, roleOf, siteOf, siteWhere } from '../access'
+import { isAdmin } from './shared'
 
-/** Digits only, so "+62 812-0000-0000" and "6281200000000" are the same login. */
-export const phoneToUsername = (phone: string) => phone.replace(/\D/g, '')
+/** Name of the HttpOnly cookie holding the Firebase session (see src/lib/firebase/admin.ts). */
+const SESSION_COOKIE = '__session'
 
-const readUsers: Access = ({ req }) => {
-  if (!req.user) return false
-  if (roleOf(req) === 'admin') return true
-  const self: Where = { id: { equals: req.user.id } }
-  if (roleOf(req) === 'supervisor') return siteWhere(req) || self
-  // Workers: themselves, plus the supervisors of their site (the "Supervisors" screen).
-  const site = siteOf(req)
-  if (!site) return self
-  return { or: [self, { and: [{ role: { equals: 'supervisor' } }, { site: { equals: site } }] }] }
+const cookieValue = (headers: Headers, name: string) =>
+  headers
+    .get('cookie')
+    ?.split(';')
+    .map((c) => c.trim())
+    .find((c) => c.startsWith(`${name}=`))
+    ?.slice(name.length + 1)
+
+/**
+ * Sign-in is Firebase (Google or email + password). /admin/session turns a Firebase ID token into a session cookie;
+ * this strategy verifies that cookie on every request and finds the matching user in Neon,
+ * which holds the role. A Firebase account without a user row here gets no access.
+ */
+const firebaseStrategy: AuthStrategy = {
+  name: 'firebase',
+  authenticate: async ({ headers, payload }) => {
+    const cookie = cookieValue(headers, SESSION_COOKIE)
+    if (!cookie) return { user: null }
+    try {
+      const { firebaseAuth, isFirebaseConfigured } = await import('../lib/firebase/admin')
+      if (!isFirebaseConfigured()) return { user: null }
+      const decoded = await firebaseAuth().verifySessionCookie(decodeURIComponent(cookie), true)
+      // Only the Firebase account linked to the row signs in — never just a matching email (/admin/session links it).
+      const found = await payload.find({
+        collection: 'users',
+        where: { firebaseUid: { equals: decoded.uid } },
+        limit: 1,
+        depth: 0,
+        overrideAccess: true,
+      })
+      const user = found.docs[0]
+      if (!user || user.disabled) return { user: null }
+      // Google sign-ins only count while the person allows them (profile setting).
+      if (decoded.firebase?.sign_in_provider === 'google.com' && !user.googleSignIn) return { user: null }
+      return { user: { ...user, collection: 'users', _strategy: 'firebase' } }
+    } catch {
+      return { user: null }
+    }
+  },
 }
 
-// Creating a user is admin-only (see `access.create`), so the only signed-out
-// create is Payload's "create first user" screen — which must be able to pick Admin.
-const adminOrFirstUser: FieldAccess = ({ req }) => !req.user || roleOf(req) === 'admin'
-
+/** Admin accounts. Field people (operators, farmers) are in `people`. */
 export const Users: CollectionConfig = {
   slug: 'users',
-  labels: { singular: 'Person', plural: 'People' },
-  admin: {
-    useAsTitle: 'name',
-    defaultColumns: ['name', 'role', 'phone', 'site'],
-    listSearchableFields: ['name', 'phone', 'village'],
-    group: 'People',
-    description:
-      'Everyone who can sign in. Workers and supervisors use the phone app with their phone number and PIN; admins use this panel.',
-  },
-  auth: {
-    // The app signs in with phone number + PIN: the phone's digits are the username.
-    loginWithUsername: { allowEmailLogin: true, requireEmail: false },
-    // Field workers are often offline for days — keep them signed in for 30 days.
-    tokenExpiration: 60 * 60 * 24 * 30,
-    maxLoginAttempts: 10,
-    lockTime: 10 * 60 * 1000,
-    cookies: {
-      // Strict works while the app and this server share a site (localhost, or
-      // app.example.com + api.example.com). Hosting them on unrelated domains
-      // needs COOKIE_SAMESITE=None, which browsers only accept over HTTPS.
-      sameSite: (process.env.COOKIE_SAMESITE as 'Lax' | 'None' | 'Strict' | undefined) || 'Strict',
-      secure: process.env.NODE_ENV === 'production',
-    },
-  },
+  auth: { disableLocalStrategy: true, strategies: [firebaseStrategy] },
   access: {
-    admin: ({ req }) => roleOf(req) === 'admin',
-    read: readUsers,
+    read: ({ req }) => (req.user?.role === 'admin' ? true : req.user ? { id: { equals: req.user.id } } : false),
     create: isAdmin,
-    update: ({ req }) => {
-      if (!req.user) return false
-      return roleOf(req) === 'admin' ? true : { id: { equals: req.user.id } }
-    },
+    update: ({ req }) => (req.user?.role === 'admin' ? true : req.user ? { id: { equals: req.user.id } } : false),
     delete: isAdmin,
-  },
-  hooks: {
-    beforeValidate: [
-      ({ data, originalDoc }) => {
-        if (!data) return data
-        // Field accounts sign in with their phone number: keep the username in step with it.
-        // Admins choose their own username, so editing an admin's phone never changes their login.
-        const role = data.role ?? originalDoc?.role
-        if (role !== 'admin' && data.phone && (!data.username || data.phone !== originalDoc?.phone)) {
-          data.username = phoneToUsername(data.phone)
-        } else if (typeof data.username === 'string' && /^[\d\s+().-]+$/.test(data.username)) {
-          // Someone typed the number as "+62 812-0000-0000": the app signs in with digits only.
-          data.username = phoneToUsername(data.username)
-        }
-        return data
-      },
-    ],
   },
   fields: [
     { name: 'name', type: 'text', required: true },
+    // The sign-in identity: only an admin changes it (Settings → Admin access).
+    { name: 'email', type: 'email', required: true, unique: true, index: true, access: { update: ({ req }) => req.user?.role === 'admin' } },
+    /** Filled in on first sign-in. */
+    { name: 'firebaseUid', type: 'text', unique: true, index: true, access: { update: () => false } },
     {
       name: 'role',
       type: 'select',
       required: true,
-      defaultValue: 'worker',
-      saveToJWT: true,
+      defaultValue: 'admin',
       options: [
         { label: 'Admin', value: 'admin' },
-        { label: 'Supervisor', value: 'supervisor' },
-        { label: 'Worker (artisan)', value: 'worker' },
+        { label: 'Viewer', value: 'viewer' },
       ],
-      access: { create: adminOrFirstUser, update: isAdminField },
+      access: { update: ({ req }) => req.user?.role === 'admin' },
     },
-    {
-      name: 'site',
-      type: 'relationship',
-      relationTo: 'sites',
-      admin: { description: 'Where this person works. They only see batches and setup lists of this site.' },
-      access: { create: adminOrFirstUser, update: isAdminField },
-    },
-    {
-      name: 'phone',
-      type: 'text',
-      admin: {
-        description:
-          'e.g. +62 812-0000-0000. This is what the person types to sign in to the app (the Username is filled in from it).',
-      },
-    },
-    { name: 'village', label: 'Village / address', type: 'text' },
-    {
-      name: 'jobTitle',
-      type: 'text',
-      localized: true,
-      admin: {
-        description: 'Shown on the Supervisors screen, e.g. "Lead supervisor".',
-        condition: (data) => data?.role === 'supervisor',
-      },
-    },
-    { name: 'avatar', label: 'Profile photo', type: 'upload', relationTo: 'media' },
-    {
-      name: 'lang',
-      label: 'App language',
-      type: 'select',
-      defaultValue: 'en',
-      options: [
-        { label: 'English', value: 'en' },
-        { label: 'Bahasa Indonesia', value: 'id' },
-      ],
-    },
+    /** Lets this person sign in with Google; otherwise only email + password. */
+    { name: 'googleSignIn', type: 'checkbox', defaultValue: false },
+    { name: 'phone', type: 'text' },
+    { name: 'photoUrl', type: 'text' },
+    { name: 'disabled', type: 'checkbox', defaultValue: false, access: { update: ({ req }) => req.user?.role === 'admin' } },
+    { name: 'lastSignInAt', type: 'date' },
   ],
 }

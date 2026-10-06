@@ -9,9 +9,9 @@ export const uid = (prefix = '') => prefix + Math.random().toString(36).slice(2,
 export const num = (n: number, digits = 2) =>
   n.toLocaleString('en-US', { maximumFractionDigits: digits, minimumFractionDigits: 0 })
 
-/** "2026-10-05" → "5 Oct 2026" */
+/** "2026-10-05" → "5 Oct 2026". UTC, because records are stored as UTC wall-clock dates. */
 export const day = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 
 /** "Pak Andi Saputra" → "AS" (honorifics skipped) */
 export const initials = (name: string) => {

@@ -1,21 +1,14 @@
 import type { DocFile } from '../data/types'
-import { uid } from './utils'
+import { uploadFile } from '../server/actions'
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from '../server/result'
+import { unwrap } from './unwrap'
 
-/** Images up to this size are kept inline so they survive a reload (prototype only). */
-const INLINE_LIMIT = 1_500_000
-
-/** Turn a picked file into a DocFile. Later this becomes an upload to Payload's media collection. */
+/** Upload a picked file to Neon; the result is kept on the record (training docs, SOPs…). */
 export async function readDoc(file: File): Promise<DocFile> {
-  const doc: DocFile = { id: uid('doc-'), name: file.name, size: file.size, type: file.type, addedAt: new Date().toISOString() }
-  if (file.type.startsWith('image/') && file.size <= INLINE_LIMIT) {
-    doc.url = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(String(reader.result))
-      reader.onerror = () => reject(reader.error)
-      reader.readAsDataURL(file)
-    })
-  }
-  return doc
+  if (file.size > MAX_UPLOAD_BYTES) throw new Error(`Files can be at most ${MAX_UPLOAD_LABEL}`)
+  const form = new FormData()
+  form.append('file', file)
+  return unwrap(await uploadFile(form))
 }
 
 export const fileSize = (bytes: number) =>
