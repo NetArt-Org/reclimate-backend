@@ -14,10 +14,21 @@ const bootstrapAdmins = () =>
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 
-/** Sign-in and sign-out must come from this site (login CSRF). */
+/**
+ * Sign-in and sign-out must come from this site (login CSRF). Behind a proxy or serverless host (Netlify)
+ * the request URL can carry an internal host, so the site's public address is also taken from the
+ * configured SERVER_URL / Netlify's URL and from the forwarded host header.
+ */
 function sameOrigin(req: Request) {
   const origin = req.headers.get('origin')
-  return !!origin && origin === new URL(req.url).origin
+  if (!origin) return false
+  const allowed = new Set<string>([new URL(req.url).origin])
+  for (const url of [process.env.SERVER_URL, process.env.URL, process.env.DEPLOY_PRIME_URL]) {
+    if (url) allowed.add(url.replace(/\/$/, ''))
+  }
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host')
+  if (host) allowed.add(`${req.headers.get('x-forwarded-proto') ?? 'https'}://${host}`)
+  return allowed.has(origin)
 }
 
 /**
@@ -31,12 +42,7 @@ export async function POST(req: Request) {
     return await signIn(req)
   } catch (err) {
     console.error('[session] sign-in failed', err)
-    // TEMPORARY diagnostics for the Netlify deploy: error type and first line only, key-like text removed.
-    const e = err as { name?: string; code?: string; message?: string }
-    const detail = `${e.name ?? 'Error'}${e.code ? ` ${e.code}` : ''}: ${String(e.message ?? '').split('\n')[0].slice(0, 300)}`
-      .replace(/-----BEGIN[\s\S]*?-----END[^-]*-----/g, '[key]')
-      .replace(/[A-Za-z0-9+/=_-]{40,}/g, '[redacted]')
-    return json({ error: 'Sign-in is temporarily unavailable. Please try again shortly.', detail }, 500)
+    return json({ error: 'Sign-in is temporarily unavailable. Please try again shortly.' }, 500)
   }
 }
 
