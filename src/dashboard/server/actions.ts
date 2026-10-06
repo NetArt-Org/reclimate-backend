@@ -4,7 +4,7 @@ import type { CollectionSlug } from 'payload'
 import { revalidatePath } from 'next/cache'
 
 import type { Alert, Company, DocFile, Kiln, Network, PartnerOrg, Site, User } from '../data/types'
-import { requireAdmin } from './payload'
+import { invalidateDashboard, requireAdmin } from './payload'
 import { guard, MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, UserError } from './result'
 import { deleteDroppedUploads, deleteUploads, fileIdsIn, storeUpload } from './storage'
 
@@ -41,6 +41,7 @@ export async function saveCompany(company: Company) {
     })
     // Documents removed from the profile (company docs, billing docs) are deleted from storage.
     await deleteDroppedUploads(before.profile, profile)
+    invalidateDashboard()
   })()
 }
 
@@ -56,6 +57,7 @@ export async function saveOrg(o: PartnerOrg) {
       admins: o.admins ?? [],
       standards: o.standards ?? null,
     })
+    invalidateDashboard()
   })()
 }
 
@@ -78,6 +80,7 @@ export async function saveNetwork(x: Network) {
     })
     // SOP documents removed from the drying/shredding steps.
     await deleteDroppedUploads(before?.config, x.config)
+    invalidateDashboard()
   })()
 }
 
@@ -85,6 +88,7 @@ export async function saveSite(s: Site) {
   return guard(async () => {
     const { payload } = await requireAdmin()
     await upsert(payload, 'sites', s.id, { network: s.networkId, code: s.code, name: s.name, lat: s.lat, lng: s.lng, active: s.active })
+    invalidateDashboard()
   })()
 }
 
@@ -101,6 +105,7 @@ export async function saveKiln(k: Kiln) {
       lng: k.lng,
       active: k.active,
     })
+    invalidateDashboard()
   })()
 }
 
@@ -125,6 +130,7 @@ export async function savePerson(u: User) {
     })
     // A replaced photo or a removed training certificate is deleted from storage.
     await deleteDroppedUploads([before?.photo, before?.trainingDocs], [u.photo, u.trainingDocs])
+    invalidateDashboard()
   })()
 }
 
@@ -134,6 +140,7 @@ export async function deletePerson(id: string) {
     const person = await payload.delete({ collection: 'people', id, overrideAccess: true })
     // Their photo and training certificates go with them.
     await deleteUploads(fileIdsIn([person.photo, person.trainingDocs]))
+    invalidateDashboard()
   })()
 }
 
@@ -158,6 +165,7 @@ export async function resolveAlert(id: string, status: Exclude<Alert['status'], 
       data: { message: `Alert ${status}: ${alert.message}`, network: networkId, by: user.name },
       overrideAccess: true,
     } as never)
+    invalidateDashboard()
   })()
 }
 

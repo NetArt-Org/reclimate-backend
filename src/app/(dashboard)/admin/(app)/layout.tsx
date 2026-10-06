@@ -1,16 +1,13 @@
-import config from '@payload-config'
-import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { getPayload } from 'payload'
 import React from 'react'
 
 import { AccessDenied, DashboardShell } from '@/dashboard/components/shell/DashboardShell'
 import { loadDashboardData } from '@/dashboard/server/load'
+import { sessionUser } from '@/dashboard/server/payload'
 
 /** Every admin page: signed-in admins only. The shared data is read from Neon here. */
 export default async function AdminAppLayout({ children }: { children: React.ReactNode }) {
-  const payload = await getPayload({ config })
-  const { user } = await payload.auth({ headers: await headers() })
+  const user = await sessionUser()
   if (!user) redirect('/admin/login')
   if (user.role !== 'admin') return <AccessDenied />
   const data = await loadDashboardData()

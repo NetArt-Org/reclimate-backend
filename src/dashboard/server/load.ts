@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { sql } from '@payloadcms/db-postgres'
+import { unstable_cache } from 'next/cache'
 
 import type {
   Alert,
@@ -17,7 +18,7 @@ import type {
   Site,
   User,
 } from '../data/types'
-import { db, n, relId, relIds } from './payload'
+import { DASHBOARD_TAG, db, n, relId, relIds } from './payload'
 
 /** SQL for the credit bucket of a batch — the single definition of the portfolio statuses. */
 export const BUCKET_SQL = sql`case
@@ -31,8 +32,17 @@ const all = { pagination: false, depth: 0, overrideAccess: true } as const
 // `raw` (the full Circonomy source record) is large and never needed for the shared dashboard data.
 const noRaw = { ...all, select: { raw: false } } as const
 
-/** Everything the dashboard pages share, read from Neon in one go. */
-export async function loadDashboardData(): Promise<DashboardData> {
+/**
+ * Everything the dashboard pages share, read from Neon in one go — cached (same for every admin) and
+ * dropped by `invalidateDashboard()` after any write that changes it, or after 5 minutes at most.
+ * Field records arriving from outside the admin (imports) show up within those 5 minutes.
+ */
+export const loadDashboardData = unstable_cache(() => readDashboardData(), ['dashboard-data-v1'], {
+  tags: [DASHBOARD_TAG],
+  revalidate: 300,
+})
+
+async function readDashboardData(): Promise<DashboardData> {
   const payload = await db()
   const drizzle = payload.db.drizzle
 

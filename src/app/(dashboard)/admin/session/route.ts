@@ -1,5 +1,6 @@
 import config from '@payload-config'
 import { cookies } from 'next/headers'
+import { after } from 'next/server'
 import { getPayload, type Where } from 'payload'
 
 /** Firebase Admin is loaded on first use, so a load problem surfaces as a logged, readable error. */
@@ -98,12 +99,17 @@ async function signIn(req: Request) {
     return json({ error: 'Google sign-in is off for this account. Sign in with your email and password.' }, 403)
   }
 
-  await payload.update({
-    collection: 'users',
-    id: user.id,
-    data: { firebaseUid: decoded.uid, lastSignInAt: new Date().toISOString(), ...(decoded.picture ? { photoUrl: decoded.picture } : {}) },
-    overrideAccess: true,
-  })
+  const signedIn = () =>
+    payload.update({
+      collection: 'users',
+      id: user.id,
+      data: { firebaseUid: decoded.uid, lastSignInAt: new Date().toISOString(), ...(decoded.picture ? { photoUrl: decoded.picture } : {}) },
+      overrideAccess: true,
+    })
+  // First sign-in links the Firebase account, which the next request needs: do it now.
+  // Otherwise "last signed in" is only bookkeeping — write it after the response (one less round trip).
+  if (user.firebaseUid !== decoded.uid) await signedIn()
+  else after(() => signedIn().catch((err) => console.warn('[session] could not record sign-in time', err)))
 
   const expiresIn = SESSION_DAYS * 24 * 60 * 60 * 1000
   const session = await firebaseAuth().createSessionCookie(idToken, { expiresIn })

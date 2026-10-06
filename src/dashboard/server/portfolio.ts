@@ -3,7 +3,7 @@
 import { sql } from '@payloadcms/db-postgres'
 import { revalidatePath } from 'next/cache'
 
-import { db, n, relId, requireAdmin } from './payload'
+import { db, n, relId, invalidateDashboard, requireAdmin } from './payload'
 import { guard, MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, UserError } from './result'
 import { storeUpload } from './storage'
 import { bucket, isFirebaseConfigured } from '@/lib/firebase/admin'
@@ -167,6 +167,7 @@ export async function registerCredits() {
       data: { message: `${t.toFixed(3)} t CO₂e registered from ${rows.length} batches`, by: user.name },
       overrideAccess: true,
     } as never)
+    invalidateDashboard()
     revalidatePath('/admin', 'layout')
     return { batches: rows.length, t }
   })()

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import type { Where } from 'payload'
 
-import { relId, relIds, requireAdmin } from './payload'
+import { relId, relIds, invalidateDashboard, requireAdmin } from './payload'
 import { clampInt, dateValue, filterValue, searchText } from './query'
 import { guard, UserError } from './result'
 
@@ -297,6 +297,7 @@ export async function assessBatch(id: string, decision: 'approve' | 'reject', re
       },
       overrideAccess: true,
     } as never)
+    invalidateDashboard()
     revalidatePath('/admin', 'layout')
   })()
 }

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 
 import type { Feedstock } from '../data/types'
-import { requireAdmin } from './payload'
+import { invalidateDashboard, requireAdmin } from './payload'
 import { guard, UserError } from './result'
 
 export interface Template {
@@ -120,6 +120,7 @@ export async function saveFeedstock(f: Omit<Feedstock, 'id'> & { id?: string }) 
       if (/unique|duplicate|already/i.test(msg)) throw new UserError(`A feedstock called ${name} already exists`)
       throw err
     }
+    invalidateDashboard()
     revalidatePath('/admin', 'layout')
   })()
 }
