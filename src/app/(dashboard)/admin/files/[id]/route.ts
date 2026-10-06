@@ -2,7 +2,6 @@ import config from '@payload-config'
 import { getPayload } from 'payload'
 import { Readable } from 'stream'
 
-import { bucket, isFirebaseConfigured } from '@/lib/firebase/admin'
 
 /** Only formats that cannot carry script are shown inline (never SVG or HTML). */
 const INLINE = /^(image\/(png|jpe?g|gif|webp)|video\/(mp4|quicktime|webm)|application\/pdf)$/
@@ -13,7 +12,16 @@ const notFound = () => new Response('Not found', { status: 404 })
  * A file for signed-in admins, streamed from Firebase Storage (with byte ranges, so videos can seek),
  * or — older uploads — from Neon. Migrated files still waiting to be copied answer 404.
  */
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    return await serve(req, ctx)
+  } catch (err) {
+    console.error('[files] could not serve file', err)
+    return new Response('This file could not be loaded right now.', { status: 500 })
+  }
+}
+
+async function serve(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const payload = await getPayload({ config })
   const { user } = await payload.auth({ headers: req.headers })
   if (!user || user.role !== 'admin') return notFound()
@@ -33,6 +41,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     'Accept-Ranges': 'bytes',
   }
 
+  const { bucket, isFirebaseConfigured } = await import('@/lib/firebase/admin')
   if (file.storagePath && isFirebaseConfigured()) {
     const obj = bucket().file(file.storagePath)
     const size = Number(file.size) || Number((await obj.getMetadata())[0].size)

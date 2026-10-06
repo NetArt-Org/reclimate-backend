@@ -2,7 +2,8 @@ import config from '@payload-config'
 import { cookies } from 'next/headers'
 import { getPayload, type Where } from 'payload'
 
-import { firebaseAuth, isFirebaseConfigured, SESSION_COOKIE, SESSION_DAYS } from '@/lib/firebase/admin'
+/** Firebase Admin is loaded on first use, so a load problem surfaces as a logged, readable error. */
+const firebase = () => import('@/lib/firebase/admin')
 
 /** Emails that become admins on their first Google sign-in (comma separated), so the first account can get in. */
 const bootstrapAdmins = () =>
@@ -26,7 +27,17 @@ function sameOrigin(req: Request) {
  *  - Google works only for people who have "Allow Google sign-in" switched on; everyone else uses email + password.
  */
 export async function POST(req: Request) {
+  try {
+    return await signIn(req)
+  } catch (err) {
+    console.error('[session] sign-in failed', err)
+    return json({ error: 'Sign-in is temporarily unavailable. Please try again shortly.' }, 500)
+  }
+}
+
+async function signIn(req: Request) {
   if (!sameOrigin(req)) return json({ error: 'Bad request' }, 403)
+  const { firebaseAuth, isFirebaseConfigured, SESSION_COOKIE, SESSION_DAYS } = await firebase()
   if (!isFirebaseConfigured()) return json({ error: 'Sign-in is not configured on the server yet.' }, 503)
   const { idToken } = (await req.json().catch(() => ({}))) as { idToken?: string }
   if (typeof idToken !== 'string' || idToken.length > 4096) return json({ error: 'Missing token' }, 400)
@@ -98,10 +109,14 @@ export async function POST(req: Request) {
 /** Sign out: drop the cookie and revoke the Firebase refresh tokens. */
 export async function DELETE(req: Request) {
   if (!sameOrigin(req)) return json({ error: 'Bad request' }, 403)
+  const { firebaseAuth, isFirebaseConfigured, SESSION_COOKIE } = await firebase().catch((err) => {
+    console.error('[session] firebase admin failed to load', err)
+    return { firebaseAuth: null, isFirebaseConfigured: () => false, SESSION_COOKIE: '__session' }
+  })
   const jar = await cookies()
   const value = jar.get(SESSION_COOKIE)?.value
   jar.delete(SESSION_COOKIE)
-  if (value && isFirebaseConfigured()) {
+  if (value && firebaseAuth && isFirebaseConfigured()) {
     try {
       const decoded = await firebaseAuth().verifySessionCookie(value)
       await firebaseAuth().revokeRefreshTokens(decoded.sub)

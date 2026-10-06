@@ -44,6 +44,9 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Hide the Next.js dev badge (bottom-left) — it covers the sidebar's Collapse button. Dev only anyway.
   devIndicators: false,
+  // Load Firebase Admin (and its Google Cloud deps) from node_modules at runtime instead of bundling it:
+  // bundled, it fails to load inside Netlify's server functions.
+  serverExternalPackages: ['firebase-admin', '@google-cloud/storage'],
   // Uploads (training certificates, SOPs, compliance documents) go through server actions to Firebase Storage.
   experimental: { serverActions: { bodySizeLimit: '5mb' } },
   async headers() {
