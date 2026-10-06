@@ -1,8 +1,9 @@
 import React from 'react'
 
 export const metadata = {
-  description: 'Backend for Artisan Pro · Reclimate dMRV',
-  title: 'Reclimate dMRV · Backend',
+  title: 'Reclimate dMRV',
+  description: "Measure, verify and track biochar production and carbon removal credits across Reclimate's networks.",
+  robots: { index: false, follow: false },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
