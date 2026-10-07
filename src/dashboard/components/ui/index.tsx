@@ -203,14 +203,20 @@ export function Segmented<T extends string>({
   onChange,
   options,
   className,
+  size = 'md',
 }: {
   value: T
   onChange: (v: T) => void
   options: { value: T; label: React.ReactNode }[]
   className?: string
+  /** `lg`: page-level tabs — larger from tablet width up, compact on phones. */
+  size?: 'md' | 'lg'
 }) {
   return (
-    <div role="tablist" className={cn('inline-flex max-w-full overflow-x-auto rounded-lg border border-line bg-muted p-0.5', className)}>
+    <div
+      role="tablist"
+      className={cn('inline-flex max-w-full overflow-x-auto rounded-lg border border-line bg-muted p-0.5', size === 'lg' && 'md:rounded-xl md:p-1', className)}
+    >
       {options.map((o) => (
         <button
           key={o.value}
@@ -220,6 +226,7 @@ export function Segmented<T extends string>({
           onClick={() => onChange(o.value)}
           className={cn(
             'cursor-pointer whitespace-nowrap rounded-md px-2.5 py-1 text-[13px] font-semibold text-ink-muted transition-colors hover:text-ink',
+            size === 'lg' && 'md:rounded-lg md:px-4 md:py-2 md:text-sm',
             o.value === value && 'bg-surface text-brand shadow-sm',
           )}
         >

@@ -56,17 +56,22 @@ function InvalidateOnResize({ dep }: { dep: unknown }) {
   return null
 }
 
-/** Points (and optional KML boundaries) on a street / satellite map. */
+/** Points (and optional KML boundaries) on a street / satellite map. Points are clickable when `onSelect` is given. */
 export function MapView({
   points,
   labels = false,
   polygons = [],
   legend = true,
+  onSelect,
+  selected,
 }: {
   points: MapPoint[]
   labels?: boolean
   polygons?: [number, number][][]
   legend?: boolean
+  onSelect?: (p: MapPoint) => void
+  /** Ids of the points shown as selected (ringed and on top). */
+  selected?: ReadonlySet<string>
 }) {
   const [base, setBase] = useState<keyof typeof TILES>('map')
   const [full, setFull] = useState(false)
@@ -82,14 +87,24 @@ export function MapView({
         {polygons.map((ring, i) => (
           <Polygon key={i} positions={ring} pathOptions={{ color: '#1f5a3d', weight: 2, fillOpacity: 0.15 }} />
         ))}
-        {points.map((p) => {
+        {/* Selected points are drawn last so they sit on top. */}
+        {[...points].sort((a, b) => Number(!!selected?.has(a.id)) - Number(!!selected?.has(b.id))).map((p) => {
           const s = STYLE[p.kind]
+          const on = !!selected?.has(p.id)
+          const dim = !!selected?.size && !on && (p.kind === 'artisan' || p.kind === 'csink' || p.kind === 'site')
           return (
             <CircleMarker
-              key={`${p.kind}-${p.id}-${labels}`}
+              key={`${p.kind}-${p.id}-${labels}-${on}`}
               center={[p.lat, p.lng]}
-              radius={s.radius}
-              pathOptions={{ color: '#fff', weight: 2, fillColor: s.color, fillOpacity: p.active ? 0.95 : 0.35 }}
+              radius={on ? s.radius + 4 : s.radius}
+              eventHandlers={onSelect ? { click: () => onSelect(p) } : undefined}
+              pathOptions={{
+                color: on ? '#1c211e' : '#fff',
+                weight: on ? 3 : 2,
+                fillColor: s.color,
+                fillOpacity: dim ? 0.3 : p.active ? 0.95 : 0.35,
+                className: onSelect ? 'cursor-pointer' : undefined,
+              }}
             >
               <Tooltip direction="top" offset={[0, -s.radius]} permanent={labels && (p.kind === 'artisan' || p.kind === 'csink' || p.kind === 'site')} className="map-label">
                 {p.label}

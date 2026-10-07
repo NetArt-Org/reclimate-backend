@@ -179,6 +179,8 @@ export interface Site {
   lat: number | null
   lng: number | null
   active: boolean
+  /** Date of the most recent batch at this site (reporting-gap check). */
+  lastBatchAt?: string
 }
 
 export interface Kiln {
@@ -191,6 +193,8 @@ export interface Kiln {
   lat: number | null
   lng: number | null
   active: boolean
+  /** Date of the most recent batch fired in this kiln (reporting-gap check). */
+  lastBatchAt?: string
 }
 
 export interface Device {

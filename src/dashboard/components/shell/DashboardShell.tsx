@@ -19,6 +19,7 @@ import { Toaster } from 'sonner'
 import { outdatedUsers } from '../../data/selectors'
 import { DashboardProvider, useDashboard } from '../../data/store'
 import type { DashboardData } from '../../data/types'
+import { clearSavedFilters } from '../../lib/saved-filters'
 import { cn } from '../../lib/utils'
 import {
   Avatar,
@@ -34,6 +35,7 @@ import { SECTIONS } from './nav'
 import { SessionProvider, useSession, type SessionUser } from './session'
 
 async function logout() {
+  clearSavedFilters()
   try {
     await fetch('/admin/session', { method: 'DELETE', credentials: 'include' })
   } finally {

@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { unwrap } from '@/dashboard/lib/unwrap'
 import { ProductionPage } from '@/dashboard/production/ProductionPage'
 import { queryProduction, type ProductionTab } from '@/dashboard/server/production'
+import { batchStats, collectionStats } from '@/dashboard/server/production-stats'
 import { ownerFiles, queryProductionExtra, type ExtraTab, type FileRef, type ViewQuery, type ViewTab } from '@/dashboard/server/production-extra'
 
 export const metadata: Metadata = { title: 'Production' }
@@ -31,10 +32,19 @@ export default async function Production({ searchParams }: { searchParams: Promi
     return <ProductionPage query={query} result={result} />
   }
 
-  const result = unwrap(await queryProduction({ ...query, tab: tab as ProductionTab }))
+  // Batches and biomass collection open with analytics above the table, for the same place and dates.
+  const scope = { networkId: query.networkId, siteId: query.siteId, from: query.from, to: query.to }
+  const statsFor = async () =>
+    tab === 'batches'
+      ? { tab: 'batches' as const, stats: unwrap(await batchStats(scope)) }
+      : tab === 'collections'
+        ? { tab: 'collections' as const, stats: unwrap(await collectionStats(scope)) }
+        : undefined
+  const [res, stats] = await Promise.all([queryProduction({ ...query, tab: tab as ProductionTab }), statsFor()])
+  const result = unwrap(res)
   let media: Record<string, FileRef[]> | undefined
   if (result.tab === 'mixing' || result.tab === 'packaging') {
     media = unwrap(await ownerFiles(result.tab === 'mixing' ? 'mixings' : 'packagings', result.rows.map((r) => r.id)))
   }
-  return <ProductionPage query={query} result={result} media={media} />
+  return <ProductionPage query={query} result={result} media={media} stats={stats} />
 }

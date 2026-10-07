@@ -9,7 +9,9 @@ import { Button, Card, EmptyState, Input, NativeSelect, Segmented, Spinner } fro
 import { useDashboard } from '../data/store'
 import { cn, num } from '../lib/utils'
 import type { ProductionResult } from '../server/production'
+import type { BatchStats, CollectionStats } from '../server/production-stats'
 import type { ExtraResult, FileRef, ViewQuery, ViewTab } from '../server/production-extra'
+import { BatchAnalytics, CollectionAnalytics } from './Analytics'
 import { BatchSheet } from './BatchSheet'
 import { KILN_TYPE, STATUS, downloadCsv, statusOf, utcDate, utcTime } from './format'
 import { useNames, type Names } from './names'
@@ -46,11 +48,14 @@ export function ProductionPage({
   query,
   result,
   media,
+  stats,
 }: {
   query: ViewQuery
   result: ProductionResult | ExtraResult
   /** Files of the rows on this page (mixing and packaging tabs), keyed by row id. */
   media?: Record<string, FileRef[]>
+  /** Analytics shown above the table (batches and biomass collection). */
+  stats?: { tab: 'batches'; stats: BatchStats } | { tab: 'collections'; stats: CollectionStats }
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -122,6 +127,7 @@ export function ProductionPage({
         <div className="flex flex-wrap items-center gap-3">
           <div className="max-w-full overflow-x-auto">
             <Segmented
+              size="lg"
               value={tab}
               onChange={(t) => go({ tab: t, status: undefined })}
               options={TABS.map((t) => ({
@@ -143,6 +149,12 @@ export function ProductionPage({
             </span>
           )}
         </div>
+
+        {stats && (
+          <div className={cn('transition-opacity', pending && 'opacity-60')}>
+            {stats.tab === 'batches' ? <BatchAnalytics stats={stats.stats} /> : <CollectionAnalytics stats={stats.stats} />}
+          </div>
+        )}
 
         <Card className="overflow-hidden">
           {/* Filters */}

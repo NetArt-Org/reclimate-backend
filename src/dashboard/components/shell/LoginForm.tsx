@@ -15,6 +15,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import Image from 'next/image'
 
 import { clientAuth, firebaseReady } from '@/lib/firebase/client'
+import { clearSavedFilters } from '../../lib/saved-filters'
 import { Button, Input } from '../ui'
 
 /** Firebase error codes → plain messages. */
@@ -56,6 +57,8 @@ export function LoginForm() {
     // The server keeps its own session cookie; the browser-side Firebase sign-in is not needed after this.
     await signOut(clientAuth()).catch(() => {})
     if (!res.ok) throw Object.assign(new Error(data.error ?? 'Sign-in failed.'), { server: true })
+    // A new sign-in starts with no filters selected.
+    clearSavedFilters()
     window.location.replace(new URL('/admin', window.location.origin).href)
   }
 

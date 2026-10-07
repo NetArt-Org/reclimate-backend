@@ -37,7 +37,7 @@ const noRaw = { ...all, select: { raw: false } } as const
  * dropped by `invalidateDashboard()` after any write that changes it, or after 5 minutes at most.
  * Field records arriving from outside the admin (imports) show up within those 5 minutes.
  */
-export const loadDashboardData = unstable_cache(() => readDashboardData(), ['dashboard-data-v1'], {
+export const loadDashboardData = unstable_cache(() => readDashboardData(), ['dashboard-data-v2'], {
   tags: [DASHBOARD_TAG],
   revalidate: 300,
 })
@@ -46,7 +46,7 @@ async function readDashboardData(): Promise<DashboardData> {
   const payload = await db()
   const drizzle = payload.db.drizzle
 
-  const [company, orgs, networks, sites, kilns, people, feedstocks, alerts, logs, production, portfolio, sampling] = await Promise.all([
+  const [company, orgs, networks, sites, kilns, people, feedstocks, alerts, logs, production, portfolio, sampling, lastBatch] = await Promise.all([
     payload.findGlobal({ slug: 'company', depth: 0, overrideAccess: true }),
     payload.find({ collection: 'organizations', ...noRaw, sort: 'code' }),
     payload.find({ collection: 'networks', ...noRaw, sort: 'name' }),
@@ -74,7 +74,14 @@ async function readDashboardData(): Promise<DashboardData> {
       from containers c left join networks n on n.id = c.network_id
       where c.kind = 'sampling' and c.added_at is not null and c.added_at + interval '6 months' <= now()
       order by c.added_at desc limit 50`),
+    // Most recent batch per kiln and per site, to spot places that have stopped reporting.
+    drizzle.execute(sql`
+      select 'kiln' as kind, kiln_id as id, max(date) as at from batches where kiln_id is not null group by kiln_id
+      union all
+      select 'site', site_id, max(date) from batches group by site_id`),
   ])
+
+  const last = new Map((lastBatch.rows as { kind: string; id: string; at: string }[]).map((r) => [`${r.kind}:${r.id}`, new Date(r.at).toISOString()]))
 
   const { name, kind, address, email, phone, dmrvProvider, profile } = company as unknown as Record<string, unknown>
   const companyData = {
@@ -127,6 +134,7 @@ async function readDashboardData(): Promise<DashboardData> {
         lat: s.lat ?? null,
         lng: s.lng ?? null,
         active: !!s.active,
+        lastBatchAt: last.get(`site:${s.id}`),
       }),
     ),
     kilns: kilns.docs.map(
@@ -140,6 +148,7 @@ async function readDashboardData(): Promise<DashboardData> {
         lat: k.lat ?? null,
         lng: k.lng ?? null,
         active: !!k.active,
+        lastBatchAt: last.get(`kiln:${k.id}`),
       }),
     ),
     users: people.docs.map(

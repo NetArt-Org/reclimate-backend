@@ -9,8 +9,8 @@ export const SECTIONS = [
   {
     label: 'Operations',
     items: [
-      { href: '/admin/portfolio', label: 'Projects portfolio', icon: Trees },
       { href: '/admin/production', label: 'Production', icon: Factory },
+      { href: '/admin/portfolio', label: 'Projects portfolio', icon: Trees },
       { href: '/admin/networks', label: 'Networks & people', icon: Network },
     ],
   },

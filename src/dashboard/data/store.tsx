@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
+import { FILTERS_KEY } from '../lib/saved-filters'
 import { unwrap } from '../lib/unwrap'
 import * as server from '../server/actions'
 import type { ActionResult } from '../server/result'
@@ -14,9 +15,8 @@ import type { Company, DashboardData, DocFile, Filters, Kiln, Network, NetworkCo
  * Dashboard state. The data comes from Neon (loaded on the server by the admin layout);
  * every action updates the screen at once, then saves through a server action.
  * If a save fails, the error is shown and the data is reloaded from the database.
- * Only the filters are kept in this browser.
+ * The filters start empty after sign-in and are kept in this browser until sign-out (see saved-filters).
  */
-const FILTERS_KEY = 'reclimate-dashboard-filters'
 
 export const DEFAULT_FILTERS: Filters = {
   orgId: null,
@@ -47,10 +47,10 @@ function useDashboardState(initial: DashboardData) {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(FILTERS_KEY)
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore of a per-browser preference
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore after a refresh
       if (saved) setFiltersRaw({ ...DEFAULT_FILTERS, ...(JSON.parse(saved) as Filters) })
     } catch {
-      /* storage unavailable */
+      /* storage unavailable or unreadable */
     }
     setReady(true)
   }, [])
