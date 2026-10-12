@@ -33,19 +33,21 @@ env:
   - variable: CORS_ORIGINS
     value: https://localhost,capacitor://localhost
     availability: [RUNTIME]
-  # Oldest app version still served; older builds get "please update" (e.g. "2.7.0"). Empty = all versions.
-  - variable: MIN_APP_VERSION
-    value: ""
-    availability: [RUNTIME]
+  # Oldest app version still served; older builds get "please update". Leave out = all versions.
+  # (App Hosting rejects empty values, so add this entry only with a version.)
+  # - variable: MIN_APP_VERSION
+  #   value: "2.7.0"
+  #   availability: [RUNTIME]
   # Firebase App Check (blocks scripts/bots that are not the real app): off | monitor | enforce.
   # Switch to monitor once the app sends App Check tokens, and to enforce when the logs show no misses.
   - variable: APP_CHECK
     value: "off"
     availability: [RUNTIME]
   # Google addresses that may sign in to the admin panel the first time (comma-separated).
-  - variable: ADMIN_EMAILS
-    value: ""
-    availability: [RUNTIME]
+  # (Add only with at least one address; App Hosting rejects empty values.)
+  # - variable: ADMIN_EMAILS
+  #   value: "you@example.com"
+  #   availability: [RUNTIME]
 
   # Firebase web config for the admin panel's sign-in page (public by design).
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
