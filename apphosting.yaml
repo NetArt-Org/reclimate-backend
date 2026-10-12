@@ -1,10 +1,16 @@
 # Firebase App Hosting — the backend (admin panel + field API) runs here.
 #   firebase apphosting:backends:create   (once; pick this folder as the root)
 #   firebase deploy --only apphosting      (deploys this folder)
-# Secrets live in Cloud Secret Manager, never in this file:
-#   firebase apphosting:secrets:set database-url     (Neon connection string, with ?sslmode=require)
-#   firebase apphosting:secrets:set payload-secret   (openssl rand -hex 32)
-# The backend uses its own service account for Firebase Auth and Storage, so no private key is needed here.
+#
+# Secrets (DATABASE_URL, PAYLOAD_SECRET, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL) are NOT in this file.
+# Today they are set in the Firebase console (App Hosting → Settings → Environment), which overrides this file.
+# Better: move them to Cloud Secret Manager, then reference them here and delete them from the console:
+#   firebase apphosting:secrets:set database-url           (Neon connection string, with ?sslmode=require)
+#   firebase apphosting:secrets:set payload-secret
+#   firebase apphosting:secrets:set firebase-private-key
+#   and add under env:   - variable: DATABASE_URL
+#                          secret: database-url          (same for the others)
+# Never reference a secret here before it exists: the rollout fails.
 
 # Sized to stay inside the free tier (Cloud Run: 180,000 vCPU-seconds, 360,000 GiB-seconds and 2 million requests
 # a month; CPU is billed only while a request runs). minInstances 0 = nothing runs (or bills) while idle.
@@ -20,16 +26,12 @@ runConfig:
   maxInstances: 3
 
 env:
-  - variable: DATABASE_URL
-    secret: database-url
-  - variable: PAYLOAD_SECRET
-    secret: payload-secret
-
   # The backend's public address (the App Hosting URL or your custom domain), used for links and CSRF checks.
   - variable: SERVER_URL
     value: https://reclimate-backend--reclimate-d0868.asia-southeast1.hosted.app
     availability: [RUNTIME]
   # Origins allowed to call the field API from a browser/webview: the Android and iOS apps.
+  # (A CORS_ORIGINS set in the console overrides this — it must include these two as well.)
   - variable: CORS_ORIGINS
     value: https://localhost,capacitor://localhost
     availability: [RUNTIME]
