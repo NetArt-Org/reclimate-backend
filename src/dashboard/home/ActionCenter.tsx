@@ -1,6 +1,6 @@
 'use client'
 
-import { Bell, CircleCheck, FlaskConical, Info, Smartphone, TriangleAlert } from 'lucide-react'
+import { Bell, CircleCheck, FlaskConical, HandCoins, Info, Smartphone, TriangleAlert, UserPlus } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -12,7 +12,14 @@ import { useDashboard } from '../data/store'
 import type { Alert } from '../data/types'
 import { cn, day } from '../lib/utils'
 
-const ICON: Record<Alert['kind'], typeof Info> = { 'bulk-density': Info, certificate: TriangleAlert, kiln: TriangleAlert, sampling: FlaskConical }
+const ICON: Record<Alert['kind'], typeof Info> = {
+  'bulk-density': Info,
+  certificate: TriangleAlert,
+  kiln: TriangleAlert,
+  sampling: FlaskConical,
+  'sell-request': HandCoins,
+  registration: UserPlus,
+}
 
 /** Things that need someone's attention, and a log of what happened. */
 export function ActionCenter() {
@@ -65,7 +72,7 @@ export function ActionCenter() {
             )}
             {alerts.map((a) => {
               const Icon = ICON[a.kind]
-              const warn = a.kind !== 'bulk-density'
+              const warn = a.kind !== 'bulk-density' && a.kind !== 'sell-request' && a.kind !== 'registration' && !a.kilnRequest
               return (
                 <div key={a.id} className="rounded-xl border border-line p-3.5">
                   <div className="flex gap-3">
@@ -79,9 +86,55 @@ export function ActionCenter() {
                           {a.request.by} asks to set {a.request.feedstock} to <b>{a.request.bulkDensity} kg/m³</b>
                         </div>
                       )}
+                      {a.registration && (
+                        <div className="mt-1 text-xs text-ink-2">
+                          {ROLE_LABEL[a.registration.role as keyof typeof ROLE_LABEL] ?? a.registration.role} at <b>{a.registration.site}</b>
+                          {a.registration.network && ` (${a.registration.network})`} · {a.registration.email}
+                          {a.registration.phone && ` · ${a.registration.phone}`}
+                        </div>
+                      )}
+                      {a.kilnRequest && (
+                        <div className="mt-1 text-xs text-ink-2">
+                          {a.kilnRequest.by} asks to add <b>{a.kilnRequest.kiln}</b>
+                          {a.kilnRequest.volumeL ? ` (${a.kilnRequest.volumeL} L)` : ''} at {a.kilnRequest.site}
+                        </div>
+                      )}
                       <div className="mt-1 text-xs text-ink-muted">{day(a.date)}</div>
+                      {a.sell?.buyer && <div className="mt-1 text-xs text-ink-2">Buyer: {a.sell.buyer}</div>}
                       <div className="mt-3 flex gap-2">
-                        {a.request ? (
+                        {a.sell ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              onClick={() => {
+                                resolveAlert(a.id, 'approved')
+                                toast.success('Marked paid — the credits leave their balance')
+                              }}
+                            >
+                              Mark paid
+                            </Button>
+                            <Button size="sm" onClick={() => resolveAlert(a.id, 'rejected')}>
+                              Decline
+                            </Button>
+                          </>
+                        ) : a.registration || a.kilnRequest ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              onClick={() => {
+                                resolveAlert(a.id, 'approved')
+                                toast.success(a.registration ? 'Approved — they can sign in to the app now' : 'Approved — the kiln is added to the site')
+                              }}
+                            >
+                              Approve
+                            </Button>
+                            <Button size="sm" onClick={() => resolveAlert(a.id, 'rejected')}>
+                              Reject
+                            </Button>
+                          </>
+                        ) : a.request ? (
                           <>
                             <Button
                               size="sm"

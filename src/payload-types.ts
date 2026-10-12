@@ -90,6 +90,8 @@ export interface Config {
     files: File;
     alerts: Alert;
     'activity-logs': ActivityLog;
+    'sell-requests': SellRequest;
+    'site-lists': SiteList;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -120,6 +122,8 @@ export interface Config {
     files: FilesSelect<false> | FilesSelect<true>;
     alerts: AlertsSelect<false> | AlertsSelect<true>;
     'activity-logs': ActivityLogsSelect<false> | ActivityLogsSelect<true>;
+    'sell-requests': SellRequestsSelect<false> | SellRequestsSelect<true>;
+    'site-lists': SiteListsSelect<false> | SiteListsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -379,6 +383,12 @@ export interface Person {
   address?: string | null;
   lat?: number | null;
   lng?: number | null;
+  appAccess?: boolean | null;
+  firebaseUid?: string | null;
+  mustChangePassword?: boolean | null;
+  lastAppSignInAt?: string | null;
+  registrationStatus?: ('none' | 'pending' | 'approved' | 'rejected') | null;
+  registrationNote?: string | null;
   raw?:
     | {
         [k: string]: unknown;
@@ -606,6 +616,7 @@ export interface Mixing {
   network: string | Network;
   site: string | Site;
   mixingType?: string | null;
+  feedstock?: string | null;
   biocharL?: number | null;
   otherMaterialKg?: number | null;
   totalKg?: number | null;
@@ -712,6 +723,10 @@ export interface Application {
   mode?: string | null;
   vehicle?: string | null;
   kind?: string | null;
+  quantity?: number | null;
+  quantityUnit?: string | null;
+  bagType?: string | null;
+  bags?: number | null;
   open?: boolean | null;
   fullySinked?: boolean | null;
   raw?:
@@ -904,6 +919,38 @@ export interface ActivityLog {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "sell-requests".
+ */
+export interface SellRequest {
+  id: string;
+  person: string | Person;
+  network?: (string | null) | Network;
+  site?: (string | null) | Site;
+  creditsT: number;
+  buyer?: string | null;
+  status: 'pending' | 'paid' | 'declined';
+  note?: string | null;
+  decidedBy?: string | null;
+  decidedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site-lists".
+ */
+export interface SiteList {
+  id: string;
+  site: string | Site;
+  category: 'bags' | 'crops' | 'buyers';
+  name: string;
+  detail?: string | null;
+  createdBy?: (string | null) | Person;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -1017,6 +1064,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'activity-logs';
         value: string | ActivityLog;
+      } | null)
+    | ({
+        relationTo: 'sell-requests';
+        value: string | SellRequest;
+      } | null)
+    | ({
+        relationTo: 'site-lists';
+        value: string | SiteList;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -1178,6 +1233,12 @@ export interface PeopleSelect<T extends boolean = true> {
   address?: T;
   lat?: T;
   lng?: T;
+  appAccess?: T;
+  firebaseUid?: T;
+  mustChangePassword?: T;
+  lastAppSignInAt?: T;
+  registrationStatus?: T;
+  registrationNote?: T;
   raw?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1327,6 +1388,7 @@ export interface MixingsSelect<T extends boolean = true> {
   network?: T;
   site?: T;
   mixingType?: T;
+  feedstock?: T;
   biocharL?: T;
   otherMaterialKg?: T;
   totalKg?: T;
@@ -1401,6 +1463,10 @@ export interface ApplicationsSelect<T extends boolean = true> {
   mode?: T;
   vehicle?: T;
   kind?: T;
+  quantity?: T;
+  quantityUnit?: T;
+  bagType?: T;
+  bags?: T;
   open?: T;
   fullySinked?: T;
   raw?: T;
@@ -1524,6 +1590,38 @@ export interface ActivityLogsSelect<T extends boolean = true> {
   by?: T;
   actionType?: T;
   at?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "sell-requests_select".
+ */
+export interface SellRequestsSelect<T extends boolean = true> {
+  id?: T;
+  person?: T;
+  network?: T;
+  site?: T;
+  creditsT?: T;
+  buyer?: T;
+  status?: T;
+  note?: T;
+  decidedBy?: T;
+  decidedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site-lists_select".
+ */
+export interface SiteListsSelect<T extends boolean = true> {
+  id?: T;
+  site?: T;
+  category?: T;
+  name?: T;
+  detail?: T;
+  createdBy?: T;
   updatedAt?: T;
   createdAt?: T;
 }

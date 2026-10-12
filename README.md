@@ -1,8 +1,9 @@
 # Reclimate dMRV · Admin
 
-Next.js 16 admin for Reclimate's biochar dMRV. **Neon Postgres** holds all records; **Firebase** handles sign-in and
-stores files. Payload 3 runs headless as the data and REST layer; its own admin UI is disabled.
-The one interface is `/admin`.
+Next.js 16 backend for Reclimate's biochar dMRV: the admin panel (`/admin`), the field app's API (`/api/field`) and
+the public pages the app links to (`/privacy`, `/terms`, `/account-deletion`). **Neon Postgres** holds all records;
+**Firebase** handles sign-in and stores files. Payload 3 runs headless as the data layer; its own admin UI is disabled.
+Hosted on **Firebase App Hosting**. It is the single source of truth for both field-app layouts.
 
 ## First run
 
@@ -27,10 +28,50 @@ an invited row is linked on first sign-in only when Firebase has verified the em
   Or list your Google address in `ADMIN_EMAILS` and sign in with Google once.
 - Everyone else: Settings → Admin access → Invite admin.
 
+## Hosting (Firebase App Hosting)
+
+Configuration is in `apphosting.yaml` (instances, memory, environment) and `firebase.json`.
+
+```bash
+npm i -g firebase-tools && firebase login
+firebase apphosting:secrets:set database-url     # the Neon pooled connection string (?sslmode=require)
+firebase apphosting:secrets:set payload-secret   # openssl rand -hex 32
+firebase apphosting:backends:create              # once: name it reclimate-backend, root directory "."
+# set SERVER_URL in apphosting.yaml to the backend's URL (or custom domain), then:
+firebase deploy --only apphosting
+```
+
+- On App Hosting the backend uses its own service account for Firebase Auth and Storage — no private key is
+  deployed. Grant that service account the **Firebase Authentication Admin** and **Storage Object Admin** roles
+  (Google Cloud console → IAM) if sign-in or uploads report permission errors.
+- Migrations run on start-up (`prodMigrations`); run `npm run migrate` against Neon yourself before a deploy that
+  changes the schema if you prefer to see them run.
+- Requests up to 32 MB are accepted (field videos up to 30 MB); see `UPLOAD_LIMITS` in `src/field/common.ts`.
+- `data/` (the Circonomy export, which holds personal data) is never deployed (`firebase.json` → `ignore`).
+
+## Field API security
+
+- **Sign-in on every request**: the Firebase ID token is verified and the person's app access re-checked (cached
+  for 20 s per account). Sign-ups need a verified email and an admin's approval.
+- **Rate limits** (`src/field/ratelimit.ts`): per account for reads, writes, uploads, sell requests and account
+  deletion, per address for sign-ups and unsigned requests. Writes and uploads are counted in Postgres
+  (`field_rate_limits`) so limits hold across instances. Over the limit → `429` with `Retry-After`.
+- **Safe retries**: batches are saved by code, records and uploads carry the phone's own id (`clientId`), sell
+  requests allow one open request — a request repeated after a lost reply is not stored twice.
+- **Input checks**: body size limits, file types and sizes, quantity and coordinate ranges, string lengths.
+- **Caching** (`src/field/cache.ts`): network rules, site totals and setup lists are cached in memory for 30–60 s
+  and cleared by writes; start-up data carries an ETag, so a phone's poll is a `304` when nothing changed.
+- **Access**: files are served only to people at the same site; CORS allows only the app's origins
+  (`CORS_ORIGINS`); errors never reveal internals.
+- **Account deletion** (`POST /api/field/account/delete`): removes the Firebase sign-in and erases personal details;
+  the person's records stay without them (carbon-credit evidence).
+
 ## Migrating from Circonomy
 
-1. Export: signed in to admin.circonomy.co, the export script reads every record through their API and saves
-   `circonomy-export.json`; put it in `data/import/` (git-ignored — it contains staff names, phones and emails).
+1. Export: open https://admin.circonomy.co signed in, paste `src/scripts/circonomy-export.browser.js` into the
+   browser console, then run `await __circonomyExport()` and `__circonomyDownload()`. It reads every record through
+   Circonomy's API with the page's own session (read-only) and downloads `circonomy-export-<date>.json`; save it as
+   `data/import/circonomy-export.json` (git-ignored — it contains staff names, phones and emails).
 2. `npm run import:circonomy` — loads it into Neon, keeping Circonomy's ids. Re-runnable: run it again with a newer
    export to update what changed and add what is new, until the switch-over.
 3. `npm run media:copy` — copies the photos, videos and PDFs into Firebase Storage. The download links in an export

@@ -4,6 +4,7 @@ import { buildConfig } from 'payload'
 import { fileURLToPath } from 'url'
 
 import { Documents, Sinks, Stocks } from './collections/credits'
+import { SellRequests, SiteLists } from './collections/field'
 import { BiomassSources, Containers, Kilns, Networks, Organizations, People, Sites, Vehicles } from './collections/network'
 import { Applications, Batches, BiomassCollections, Feedstocks, Inventories, Mixings, Packagings } from './collections/production'
 import { ActivityLogs, Alerts, Files, Templates } from './collections/system'
@@ -15,7 +16,7 @@ const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
 // Where this server is reached. Cookie-authenticated writes must come from here (CSRF allow-list).
-// Netlify provides the site's address as URL, so it works there even if SERVER_URL is not set.
+// Set SERVER_URL to the public address (Firebase App Hosting URL or custom domain); URL is a fallback some hosts set.
 const serverOrigin = (process.env.SERVER_URL || process.env.URL || 'http://localhost:3001').replace(/\/$/, '')
 const origins = (process.env.CORS_ORIGINS || '')
   .split(',')
@@ -52,6 +53,8 @@ export default buildConfig({
     Files,
     Alerts,
     ActivityLogs,
+    SellRequests,
+    SiteLists,
   ],
   globals: [Company],
   cors: origins,

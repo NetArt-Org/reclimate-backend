@@ -4,7 +4,7 @@ import type { CollectionSlug } from 'payload'
 import { revalidatePath } from 'next/cache'
 
 import type { Alert, Company, DocFile, Kiln, Network, PartnerOrg, Site, User } from '../data/types'
-import { invalidateDashboard, requireAdmin } from './payload'
+import { invalidateDashboard, relIds, requireAdmin } from './payload'
 import { guard, MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, UserError } from './result'
 import { deleteDroppedUploads, deleteUploads, fileIdsIn, storeUpload } from './storage'
 
@@ -148,7 +148,52 @@ export async function deletePerson(id: string) {
 export async function resolveAlert(id: string, status: Exclude<Alert['status'], 'open'>) {
   return guard(async () => {
     const { payload, user } = await requireAdmin()
+    // A field-app sell request: approve = paid (the credits leave the worker's balance), reject = declined.
+    if (id.startsWith('sell-')) {
+      const req = await payload.update({
+        collection: 'sell-requests',
+        id: id.slice(5),
+        data: { status: status === 'approved' ? 'paid' : 'declined', decidedBy: user.name, decidedAt: new Date().toISOString() },
+        depth: 1,
+        overrideAccess: true,
+      })
+      const person = typeof req.person === 'object' && req.person ? req.person.name : 'a worker'
+      await payload.create({
+        collection: 'activity-logs',
+        data: { message: `Sell request of ${req.creditsT} credits from ${person} ${status === 'approved' ? 'marked paid' : 'declined'}`, network: req.network, by: user.name, at: new Date().toISOString() },
+        overrideAccess: true,
+      } as never)
+      invalidateDashboard()
+      return
+    }
+    // A field-app sign-up: approve = app access at the site they chose; reject = they see that it was not approved.
+    if (id.startsWith('reg-')) {
+      const approve = status === 'approved'
+      const person = await payload.update({
+        collection: 'people',
+        id: id.slice(4),
+        data: { registrationStatus: approve ? 'approved' : 'rejected', appAccess: approve, active: true, registrationNote: approve ? null : 'Your registration was not approved. Contact your admin.' },
+        depth: 0,
+        overrideAccess: true,
+      })
+      await payload.create({
+        collection: 'activity-logs',
+        data: { message: `Field app sign-up of ${person.name} ${approve ? 'approved' : 'rejected'}`, network: relIds(person.networks)[0], by: user.name, at: new Date().toISOString() },
+        overrideAccess: true,
+      } as never)
+      invalidateDashboard()
+      return
+    }
     const alert = await payload.update({ collection: 'alerts', id, data: { status }, depth: 0, overrideAccess: true })
+    // A kiln a field user asked for: approving adds it to their site.
+    const kilnReq = alert.request as Alert['kilnRequest'] | null
+    if (status === 'approved' && kilnReq?.kiln && kilnReq.siteId) {
+      await payload.create({
+        collection: 'kilns',
+        data: { site: kilnReq.siteId, name: kilnReq.kiln, type: 'kontiki', volumeM3: kilnReq.volumeL ? kilnReq.volumeL / 1000 : null, active: true } as never,
+        overrideAccess: true,
+      })
+    }
     const networkId = alert.network ? String(typeof alert.network === 'object' ? alert.network.id : alert.network) : undefined
     const request = alert.request as Alert['request']
     if (status === 'approved' && request && networkId) {

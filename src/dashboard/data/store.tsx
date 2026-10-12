@@ -161,9 +161,12 @@ function useDashboardState(initial: DashboardData) {
         ),
 
       /* ---------- people ---------- */
-      addUser: (u: Omit<User, 'id' | 'trainingDocs' | 'otpBypass'>) => {
+      addUser: (u: Omit<User, 'id' | 'trainingDocs' | 'otpBypass' | 'appLogin'>) => {
         const id = newId()
-        mutate((d) => void d.users.push({ ...u, id, otpBypass: false, trainingDocs: [] }), savePerson(id))
+        mutate(
+          (d) => void d.users.push({ ...u, id, otpBypass: false, trainingDocs: [], appLogin: { enabled: false, hasAccount: false, mustChangePassword: false } }),
+          savePerson(id),
+        )
         return id
       },
       updateUser: (id: string, patch: Partial<User>) =>

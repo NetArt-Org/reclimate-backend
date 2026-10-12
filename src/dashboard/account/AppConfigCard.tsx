@@ -1,6 +1,6 @@
 'use client'
 
-import { Camera, Check, Clock, Droplets, History, Pencil, Thermometer, X } from 'lucide-react'
+import { Camera, Check, Clock, Coins, Droplets, History, Pencil, Thermometer, X } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
@@ -120,7 +120,7 @@ export function AppConfigCard() {
               icon={<Droplets />}
               tone="bg-info-soft text-info"
               name="Moisture"
-              rule={`Max ${cfg.moisture.max}%`}
+              rule={`Max ${cfg.moisture.max}% · ${cfg.moisture.readings} reading${cfg.moisture.readings === 1 ? '' : 's'}`}
               required={cfg.moisture.required}
             />
             <Sensor
@@ -140,10 +140,15 @@ export function AppConfigCard() {
                 value={cfg.recordVideo ? 'Yes' : 'No'}
                 on={cfg.recordVideo}
               />
+              <Setting label="Firing videos" value={cfg.recordVideo ? String(cfg.minFiringVideos) : '—'} />
               <Setting
                 label="Minimum video length"
                 value={cfg.recordVideo ? `${cfg.minVideoSeconds}s` : '—'}
               />
+              <Setting label="Biomass photos" value={String(cfg.photos.biomass)} />
+              <Setting label="Mixing photos" value={String(cfg.photos.mixing)} />
+              <Setting label="Packing photos" value={String(cfg.photos.packing)} />
+              <Setting label="Application photos" value={String(cfg.photos.application)} />
               <Setting
                 label="Can apply open (unmixed) biochar"
                 value={cfg.canApplyOpenBiochar ? 'Yes' : 'No'}
@@ -168,6 +173,15 @@ export function AppConfigCard() {
               ))}
             </div>
           </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-line p-4">
+          <Heading icon={<Coins />}>Credits shown in the app</Heading>
+          <dl className="grid grid-cols-1 divide-y divide-line text-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            <Setting label="Price per credit" value={`${cfg.credits.currency} ${cfg.credits.price.toLocaleString('en')}`} />
+            <Setting label="Payout goal" value={`${cfg.credits.payoutGoal.toLocaleString('en')} credits`} />
+            <Setting label="Support phone" value={cfg.supportPhone || '—'} />
+          </dl>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
@@ -352,6 +366,15 @@ function ConfigForm({
             onChange={(e) => setC({ ...c, moisture: { ...c.moisture, max: n(e.target.value) } })}
           />
         </Field>
+        <Field label="Readings (each with a meter photo)">
+          <Input
+            type="number"
+            min={1}
+            max={10}
+            value={c.moisture.readings}
+            onChange={(e) => setC({ ...c, moisture: { ...c.moisture, readings: Math.min(10, Math.max(1, n(e.target.value))) } })}
+          />
+        </Field>
       </fieldset>
       <fieldset className="flex flex-col gap-3">
         <legend className="mb-2 text-xs font-semibold tracking-wide text-ink-muted uppercase">
@@ -406,6 +429,17 @@ function ConfigForm({
           onChange={(recordVideo) => setC({ ...c, recordVideo })}
         />
         {c.recordVideo && (
+          <Field label="Firing videos">
+            <Input
+              type="number"
+              min={1}
+              max={5}
+              value={c.minFiringVideos}
+              onChange={(e) => setC({ ...c, minFiringVideos: Math.min(5, Math.max(1, n(e.target.value))) })}
+            />
+          </Field>
+        )}
+        {c.recordVideo && (
           <Field label="Minimum video length (seconds)">
             <Input
               type="number"
@@ -446,6 +480,64 @@ function ConfigForm({
             ))}
           </div>
         </div>
+      </fieldset>
+      <fieldset className="flex flex-col gap-3">
+        <legend className="mb-2 text-xs font-semibold tracking-wide text-ink-muted uppercase">
+          Minimum photos
+        </legend>
+        <div className="grid grid-cols-2 gap-3">
+          {(
+            [
+              ['biomass', 'Biomass collection'],
+              ['mixing', 'Mixing'],
+              ['packing', 'Packing'],
+              ['application', 'Application'],
+            ] as const
+          ).map(([k, label]) => (
+            <Field key={k} label={label}>
+              <Input
+                type="number"
+                min={0}
+                max={10}
+                value={c.photos[k]}
+                onChange={(e) => setC({ ...c, photos: { ...c.photos, [k]: Math.min(10, n(e.target.value)) } })}
+              />
+            </Field>
+          ))}
+        </div>
+      </fieldset>
+      <fieldset className="flex flex-col gap-3">
+        <legend className="mb-2 text-xs font-semibold tracking-wide text-ink-muted uppercase">
+          Credits &amp; support
+        </legend>
+        <div className="grid grid-cols-[1fr_2fr] gap-3">
+          <Field label="Currency">
+            <Input
+              value={c.credits.currency}
+              maxLength={3}
+              onChange={(e) => setC({ ...c, credits: { ...c.credits, currency: e.target.value.toUpperCase().slice(0, 3) } })}
+            />
+          </Field>
+          <Field label="Price per credit">
+            <Input
+              type="number"
+              min={0}
+              value={c.credits.price}
+              onChange={(e) => setC({ ...c, credits: { ...c.credits, price: n(e.target.value) } })}
+            />
+          </Field>
+        </div>
+        <Field label="Payout goal (credits)" hint="Workers can ask to sell once they reach this many credits.">
+          <Input
+            type="number"
+            min={0}
+            value={c.credits.payoutGoal}
+            onChange={(e) => setC({ ...c, credits: { ...c.credits, payoutGoal: n(e.target.value) } })}
+          />
+        </Field>
+        <Field label="Support phone" hint="The app's support button calls this number.">
+          <Input type="tel" value={c.supportPhone} onChange={(e) => setC({ ...c, supportPhone: e.target.value.slice(0, 30) })} />
+        </Field>
       </fieldset>
       <div className="sticky bottom-0 -mx-4 mt-2 flex gap-2 border-t border-line bg-surface px-4 py-3">
         <Button className="flex-1 rounded-xl" onClick={onCancel}>

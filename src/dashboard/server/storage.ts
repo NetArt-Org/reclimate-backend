@@ -7,22 +7,30 @@ import type { DocFile } from '../data/types'
 import { db } from './payload'
 import { UserError } from './result'
 
-/** Largest upload accepted — under the request-body limit of serverless hosts (Netlify: ~6 MB). */
-export const MAX_FILE = 4 * 1024 * 1024
+/** Largest admin-panel upload by default (callers can allow more, e.g. field videos). */
+export const MAX_FILE = 10 * 1024 * 1024
+/** Without Firebase Storage (local development only), files up to this size are kept in Neon. */
+const MAX_IN_DATABASE = 4 * 1024 * 1024
 
 /**
  * Store an uploaded file: bytes in Firebase Storage, the record in Neon (`files`).
  * Until Firebase is configured, small files are kept in Neon so uploads keep working.
  */
-export async function storeUpload(file: File, owner?: { collection: string; id: string; category?: string }): Promise<DocFile> {
-  if (file.size > MAX_FILE) throw new UserError('Files can be at most 4 MB')
+export async function storeUpload(
+  file: File,
+  owner?: { collection: string; id: string; category?: string },
+  opts: { maxBytes?: number; name?: string } = {},
+): Promise<DocFile> {
+  const max = opts.maxBytes ?? MAX_FILE
+  if (file.size > max) throw new UserError(`Files can be at most ${Math.round(max / 1024 / 1024)} MB`)
+  if (!isFirebaseConfigured() && file.size > MAX_IN_DATABASE) throw new UserError('File storage is not set up for files this large.')
   const payload = await db()
   const id = randomUUID()
   const bytes = Buffer.from(await file.arrayBuffer())
   const mimeType = file.type || 'application/octet-stream'
   const base = {
     id,
-    name: file.name,
+    name: (opts.name ?? file.name).slice(0, 160),
     mimeType,
     size: file.size,
     category: owner?.category ?? 'upload',
@@ -31,7 +39,7 @@ export async function storeUpload(file: File, owner?: { collection: string; id: 
     status: 'stored' as const,
   }
   if (isFirebaseConfigured()) {
-    const storagePath = `uploads/${id}/${file.name.replace(/[^\w.-]+/g, '_')}`
+    const storagePath = `uploads/${id}/${(opts.name ?? file.name).replace(/[^\w.-]+/g, '_').slice(0, 120)}`
     await bucket().file(storagePath).save(bytes, { contentType: mimeType, resumable: false })
     await payload.create({ collection: 'files', data: { ...base, storagePath }, overrideAccess: true } as never)
   } else {

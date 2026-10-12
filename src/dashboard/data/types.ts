@@ -39,14 +39,22 @@ export interface PortfolioFeedstock {
 
 /** Field-app rules for one kind of network (or the company default). */
 export interface AppConfig {
-  moisture: { required: boolean; max: number }
+  moisture: { required: boolean; max: number; readings: number }
   temperature: { required: boolean; min: number; readings: number }
   minFiringImages: number
   recordVideo: boolean
+  /** How many firing videos when a video is recorded. */
+  minFiringVideos: number
   minVideoSeconds: number
   canApplyOpenBiochar: boolean
   hideMixingTab: boolean
   quenchSteps: string[]
+  /** Minimum photos for the other records. */
+  photos: { biomass: number; mixing: number; packing: number; application: number }
+  /** What the app shows workers about their credits. */
+  credits: { price: number; currency: string; payoutGoal: number }
+  /** Number the app's support button calls. */
+  supportPhone: string
 }
 export type AppConfigScope = 'artisan' | 'csink' | 'company'
 
@@ -222,6 +230,8 @@ export interface User {
   /** Farmers are shown on the map. */
   lat?: number
   lng?: number
+  /** Field-app login (created by an admin). */
+  appLogin: { enabled: boolean; hasAccount: boolean; mustChangePassword: boolean; lastSignInAt?: string }
 }
 
 /** Production per site per week (in the backend this is summed from batches). */
@@ -241,12 +251,18 @@ export interface Production {
 export interface Alert {
   id: string
   /** sampling: a sampling container has been kept 6 months (computed, not stored). */
-  kind: 'bulk-density' | 'certificate' | 'kiln' | 'sampling'
+  kind: 'bulk-density' | 'certificate' | 'kiln' | 'sampling' | 'sell-request' | 'registration'
   message: string
   date: string
   networkId?: string
   /** For bulk-density requests: the change being asked for (kg/m³). */
   request?: { feedstock: string; bulkDensity: number; by: string }
+  /** A kiln a field user asked to add to their site. */
+  kilnRequest?: { kiln: string; volumeL: number | null; siteId: string; site?: string; by: string }
+  /** For a self-registration from the field app. */
+  registration?: { name: string; email: string; phone: string; role: string; site: string; network: string }
+  /** For sell requests from the field app. */
+  sell?: { person: string; creditsT: number; buyer?: string }
   status: 'open' | 'approved' | 'rejected' | 'dismissed'
 }
 

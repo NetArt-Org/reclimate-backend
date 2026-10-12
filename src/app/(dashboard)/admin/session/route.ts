@@ -3,6 +3,8 @@ import { cookies } from 'next/headers'
 import { after } from 'next/server'
 import { getPayload, type Where } from 'payload'
 
+import { clientIp, limit, RateLimited } from '@/field/ratelimit'
+
 /** Firebase Admin is loaded on first use, so a load problem surfaces as a logged, readable error. */
 const firebase = () => import('@/lib/firebase/admin')
 
@@ -16,9 +18,9 @@ const bootstrapAdmins = () =>
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 
 /**
- * Sign-in and sign-out must come from this site (login CSRF). Behind a proxy or serverless host (Netlify)
+ * Sign-in and sign-out must come from this site (login CSRF). Behind a proxy (Firebase App Hosting / Cloud Run)
  * the request URL can carry an internal host, so the site's public address is also taken from the
- * configured SERVER_URL / Netlify's URL and from the forwarded host header.
+ * configured SERVER_URL and from the forwarded host header.
  */
 function sameOrigin(req: Request) {
   const origin = req.headers.get('origin')
@@ -49,6 +51,12 @@ export async function POST(req: Request) {
 
 async function signIn(req: Request) {
   if (!sameOrigin(req)) return json({ error: 'Bad request' }, 403)
+  try {
+    await limit(await getPayload({ config }), 'adminSignIn', clientIp(req))
+  } catch (err) {
+    if (!(err instanceof RateLimited)) throw err
+    return Response.json({ error: 'Too many sign-in attempts. Please wait a few minutes.' }, { status: 429, headers: { 'Retry-After': String(err.retryAfter) } })
+  }
   const { firebaseAuth, isFirebaseConfigured, SESSION_COOKIE, SESSION_DAYS } = await firebase()
   if (!isFirebaseConfigured()) return json({ error: 'Sign-in is not configured on the server yet.' }, 503)
   const { idToken } = (await req.json().catch(() => ({}))) as { idToken?: string }

@@ -1,0 +1,65 @@
+# Firebase App Hosting — the backend (admin panel + field API) runs here.
+#   firebase apphosting:backends:create   (once; pick this folder as the root)
+#   firebase deploy --only apphosting      (deploys this folder)
+# Secrets live in Cloud Secret Manager, never in this file:
+#   firebase apphosting:secrets:set database-url     (Neon connection string, with ?sslmode=require)
+#   firebase apphosting:secrets:set payload-secret   (openssl rand -hex 32)
+# The backend uses its own service account for Firebase Auth and Storage, so no private key is needed here.
+
+# Sized to stay inside the free tier (Cloud Run: 180,000 vCPU-seconds, 360,000 GiB-seconds and 2 million requests
+# a month; CPU is billed only while a request runs). minInstances 0 = nothing runs (or bills) while idle.
+# maxInstances caps the bill: a flood that gets past the rate limits is answered "busy" instead of starting
+# ever more instances. Also set a budget alert in Google Cloud Billing (e.g. $1) so any charge is noticed at once.
+runConfig:
+  cpu: 1
+  memoryMiB: 1024
+  # Requests one instance handles at once; more traffic starts more instances (up to maxInstances).
+  # Uploads are further limited to 4 at a time per instance (src/app/api/field/[...path]/route.ts).
+  concurrency: 40
+  minInstances: 0
+  maxInstances: 3
+
+env:
+  - variable: DATABASE_URL
+    secret: database-url
+  - variable: PAYLOAD_SECRET
+    secret: payload-secret
+
+  # The backend's public address (the App Hosting URL or your custom domain), used for links and CSRF checks.
+  - variable: SERVER_URL
+    value: https://reclimate-backend--reclimate-d0868.asia-southeast1.hosted.app
+    availability: [RUNTIME]
+  # Origins allowed to call the field API from a browser/webview: the Android and iOS apps.
+  - variable: CORS_ORIGINS
+    value: https://localhost,capacitor://localhost
+    availability: [RUNTIME]
+  # Oldest app version still served; older builds get "please update" (e.g. "2.7.0"). Empty = all versions.
+  - variable: MIN_APP_VERSION
+    value: ""
+    availability: [RUNTIME]
+  # Firebase App Check (blocks scripts/bots that are not the real app): off | monitor | enforce.
+  # Switch to monitor once the app sends App Check tokens, and to enforce when the logs show no misses.
+  - variable: APP_CHECK
+    value: "off"
+    availability: [RUNTIME]
+  # Google addresses that may sign in to the admin panel the first time (comma-separated).
+  - variable: ADMIN_EMAILS
+    value: ""
+    availability: [RUNTIME]
+
+  # Firebase web config for the admin panel's sign-in page (public by design).
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: AIzaSyBnIBgPnhXCHCbC4X2LNZUpYnxq0US5M84
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: reclimate-d0868.firebaseapp.com
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: reclimate-d0868
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: reclimate-d0868.firebasestorage.app
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: 1:823047856035:web:5afaa0f3e32919912e8416
+    availability: [BUILD, RUNTIME]

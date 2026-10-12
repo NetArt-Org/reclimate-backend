@@ -1,0 +1,17 @@
+{
+  "apphosting": [
+    {
+      "backendId": "reclimate-backend",
+      "rootDir": ".",
+      "ignore": [
+        "node_modules",
+        ".git",
+        ".next",
+        "data",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "functions"
+      ]
+    }
+  ]
+}

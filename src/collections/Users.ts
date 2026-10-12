@@ -17,7 +17,7 @@ const cookieValue = (headers: Headers, name: string) =>
 
 /**
  * Users looked up by Firebase uid, kept for a minute by this server instance: most requests then skip a
- * database round trip (the database is far from the Netlify function). Any change to a user clears it here;
+ * database round trip (the database is a network hop away from the server). Any change to a user clears it here;
  * another warm instance picks the change up within the minute.
  */
 const USER_TTL = 60_000

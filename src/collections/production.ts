@@ -120,6 +120,8 @@ export const Mixings: CollectionConfig = {
     rel('network', 'networks', { required: true }),
     rel('site', 'sites', { required: true }),
     { name: 'mixingType', type: 'text' },
+    /** Feedstock of the biochar used (when mixed from stock rather than from listed batches). */
+    { name: 'feedstock', type: 'text' },
     num('biocharL'),
     num('otherMaterialKg'),
     num('totalKg'),
@@ -195,7 +197,12 @@ export const Applications: CollectionConfig = {
     { name: 'mixTypes', type: 'json' },
     { name: 'mode', type: 'text' },
     { name: 'vehicle', type: 'text' },
+    /** application (put on a field) or distribution (handed to a farmer/buyer); migrated rows keep Circonomy's wording. */
     { name: 'kind', type: 'text' },
+    num('quantity'),
+    { name: 'quantityUnit', type: 'text' },
+    { name: 'bagType', type: 'text' },
+    num('bags'),
     { name: 'open', type: 'checkbox', defaultValue: false },
     { name: 'fullySinked', type: 'checkbox', defaultValue: false },
     raw,

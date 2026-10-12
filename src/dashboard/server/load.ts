@@ -18,6 +18,7 @@ import type {
   Site,
   User,
 } from '../data/types'
+import { withAppDefaults } from '../data/catalog'
 import { DASHBOARD_TAG, db, n, relId, relIds } from './payload'
 
 /** SQL for the credit bucket of a batch — the single definition of the portfolio statuses. */
@@ -34,19 +35,20 @@ const noRaw = { ...all, select: { raw: false } } as const
 
 /**
  * Everything the dashboard pages share, read from Neon in one go — cached (same for every admin) and
- * dropped by `invalidateDashboard()` after any write that changes it, or after 5 minutes at most.
- * Field records arriving from outside the admin (imports) show up within those 5 minutes.
+ * dropped by `invalidateDashboard()` after any write that changes it, or after a minute at most.
+ * That invalidation only reaches the server instance that made the write; with several instances (App Hosting)
+ * another one can serve its older copy — for a minute at most. Field-app records and imports show up within it too.
  */
 export const loadDashboardData = unstable_cache(() => readDashboardData(), ['dashboard-data-v2'], {
   tags: [DASHBOARD_TAG],
-  revalidate: 300,
+  revalidate: 60,
 })
 
 async function readDashboardData(): Promise<DashboardData> {
   const payload = await db()
   const drizzle = payload.db.drizzle
 
-  const [company, orgs, networks, sites, kilns, people, feedstocks, alerts, logs, production, portfolio, sampling, lastBatch] = await Promise.all([
+  const [company, orgs, networks, sites, kilns, people, feedstocks, alerts, logs, production, portfolio, sampling, lastBatch, sellRequests, registrations] = await Promise.all([
     payload.findGlobal({ slug: 'company', depth: 0, overrideAccess: true }),
     payload.find({ collection: 'organizations', ...noRaw, sort: 'code' }),
     payload.find({ collection: 'networks', ...noRaw, sort: 'name' }),
@@ -79,13 +81,23 @@ async function readDashboardData(): Promise<DashboardData> {
       select 'kiln' as kind, kiln_id as id, max(date) as at from batches where kiln_id is not null group by kiln_id
       union all
       select 'site', site_id, max(date) from batches group by site_id`),
+    payload.find({ collection: 'sell-requests', where: { status: { equals: 'pending' } }, depth: 1, overrideAccess: true, pagination: false, sort: '-createdAt' }),
+    // People who signed up in the field app and wait for an admin.
+    payload.find({ collection: 'people', where: { registrationStatus: { equals: 'pending' } }, depth: 1, overrideAccess: true, pagination: false, sort: '-createdAt', select: { name: true, email: true, phone: true, role: true, sites: true, networks: true, createdAt: true } }),
   ])
 
   const last = new Map((lastBatch.rows as { kind: string; id: string; at: string }[]).map((r) => [`${r.kind}:${r.id}`, new Date(r.at).toISOString()]))
 
   const { name, kind, address, email, phone, dmrvProvider, profile } = company as unknown as Record<string, unknown>
+  const prof = (profile ?? {}) as Partial<Company>
   const companyData = {
-    ...(profile as object),
+    ...prof,
+    // Older stored settings lack newer options; show them with their defaults.
+    appConfig: {
+      artisan: withAppDefaults(prof.appConfig?.artisan),
+      csink: withAppDefaults(prof.appConfig?.csink),
+      company: withAppDefaults(prof.appConfig?.company),
+    },
     name: name ?? '',
     kind: kind ?? '',
     address: address ?? '',
@@ -168,6 +180,12 @@ async function readDashboardData(): Promise<DashboardData> {
         device: (p.device as User['device']) ?? undefined,
         lat: p.lat ?? undefined,
         lng: p.lng ?? undefined,
+        appLogin: {
+          enabled: !!p.appAccess,
+          hasAccount: !!p.firebaseUid,
+          mustChangePassword: !!p.mustChangePassword,
+          lastSignInAt: p.lastAppSignInAt ?? undefined,
+        },
       }),
     ),
     feedstocks: feedstocks.docs.map(
@@ -210,7 +228,9 @@ async function readDashboardData(): Promise<DashboardData> {
           message: a.message,
           date: a.createdAt,
           networkId: relId(a.network),
-          request: (a.request as Alert['request']) ?? undefined,
+          ...((a.request as { kiln?: string } | null)?.kiln
+            ? { kilnRequest: a.request as Alert['kilnRequest'] }
+            : { request: (a.request as Alert['request']) ?? undefined }),
           status: a.status ?? 'open',
         }),
       ),
@@ -224,6 +244,33 @@ async function readDashboardData(): Promise<DashboardData> {
           status: 'open',
         }),
       ),
+      // Sell requests from the field app, until an admin marks them paid or declines them.
+      ...sellRequests.docs.map((r): Alert => {
+        const person = typeof r.person === 'object' && r.person ? r.person.name : 'A worker'
+        return {
+          id: `sell-${r.id}`,
+          kind: 'sell-request',
+          message: `${person} asks to sell ${r.creditsT} credits`,
+          date: r.createdAt,
+          networkId: relId(r.network),
+          sell: { person, creditsT: r.creditsT, buyer: r.buyer ?? undefined },
+          status: 'open',
+        }
+      }),
+      // Sign-ups from the field app, until an admin approves or rejects them.
+      ...registrations.docs.map((p): Alert => {
+        const site = Array.isArray(p.sites) && typeof p.sites[0] === 'object' ? p.sites[0] : null
+        const net = Array.isArray(p.networks) && typeof p.networks[0] === 'object' ? p.networks[0] : null
+        return {
+          id: `reg-${p.id}`,
+          kind: 'registration',
+          message: `${p.name} signed up for the field app`,
+          date: p.createdAt,
+          networkId: net?.id ? String(net.id) : undefined,
+          registration: { name: p.name, email: p.email ?? '', phone: p.phone ?? '', role: p.role, site: site?.name ?? '', network: net?.name ?? '' },
+          status: 'open',
+        }
+      }),
     ],
     logs: logs.docs.map(
       (l): LogEntry => ({ id: String(l.id), message: l.message, date: l.at ?? l.createdAt, networkId: relId(l.network) }),

@@ -15,6 +15,7 @@ import type { DocFile, User } from '../data/types'
 import { readDoc } from '../lib/files'
 import { day, versionLess } from '../lib/utils'
 import { ROLE_TONE } from './PeopleTable'
+import { AppLoginSection } from './AppLoginSection'
 import { UserDialog } from './Dialogs'
 
 /** Person detail: role, contact, assignments, training documents and device. */
@@ -137,6 +138,9 @@ function UserDetail({ user: u, onDeleted }: { user: User; onDeleted: () => void 
           </InfoRow>
         </div>
       </section>
+
+      {/* ---- field-app login ---- */}
+      <AppLoginSection user={u} />
 
       {/* ---- assignments ---- */}
       <AssignSection

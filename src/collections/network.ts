@@ -121,6 +121,23 @@ export const People: CollectionConfig = {
     { name: 'device', type: 'json' },
     { name: 'address', type: 'text' },
     ...latLng,
+    /* ---- field-app sign-in (an admin creates the login and hands it over) ---- */
+    /** Can sign in to the field app. */
+    { name: 'appAccess', type: 'checkbox', defaultValue: false },
+    /** The Firebase account of the login; set when an admin creates it. */
+    { name: 'firebaseUid', type: 'text', unique: true, index: true },
+    /** Asked to choose their own password on first sign-in. */
+    { name: 'mustChangePassword', type: 'checkbox', defaultValue: false },
+    { name: 'lastAppSignInAt', type: 'date' },
+    /** Signed up in the field app (Register now) and waiting for an admin, or the admin's decision. */
+    {
+      name: 'registrationStatus',
+      type: 'select',
+      defaultValue: 'none',
+      index: true,
+      options: ['none', 'pending', 'approved', 'rejected'].map((v) => ({ label: v, value: v })),
+    },
+    { name: 'registrationNote', type: 'text' },
     raw,
   ],
 }
