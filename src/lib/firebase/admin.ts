@@ -19,8 +19,9 @@ function app(): App {
   if (getApps().length) return getApp()
   const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
   if (hasKey()) {
-    // .env files keep the key on one line with literal "\n"; turn them back into line breaks.
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY!.replace(/\\n/g, '\n')
+    // .env files keep the key on one line with literal "\n"; turn them back into line breaks. A value pasted into
+    // a console (App Hosting → Environment) keeps the quotes .env files use, which makes the key unreadable: drop them.
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY!.trim().replace(/^(['"])([\s\S]*)\1$/, '$2').replace(/\\n/g, '\n')
     return initializeApp({ credential: cert({ projectId: projectId(), clientEmail: process.env.FIREBASE_CLIENT_EMAIL, privateKey }), storageBucket })
   }
   if (onGoogleCloud()) return initializeApp({ credential: applicationDefault(), projectId: projectId(), storageBucket })
