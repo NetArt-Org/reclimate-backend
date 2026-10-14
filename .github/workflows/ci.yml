@@ -1,0 +1,70 @@
+# CI for the backend: every push to main (and every pull request) is checked before anyone relies on it.
+# Deployment (CD) is Firebase App Hosting's own: it builds and rolls out every push to main by itself
+# (App Hosting → reclimate-backend → Rollouts). If this workflow fails, look at the rollout too.
+#
+# No production secret is used here: the build runs against a throwaway empty Postgres, which also proves that every
+# migration applies cleanly to a fresh database.
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push cancels the run still going for an older one (saves CI minutes).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Typecheck, lint, audit, migrate, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ci" --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      PAYLOAD_SECRET: ci-build-only-not-a-real-secret
+      NEXT_TELEMETRY_DISABLED: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # Fails only on critical advisories in what ships; the full report is printed for review.
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=critical
+
+      - name: Apply migrations to an empty database
+        run: npm run migrate
+
+      - name: Build
+        run: npm run build
