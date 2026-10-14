@@ -21,6 +21,7 @@ export function proxy(req: NextRequest) {
   hits.set(key, entry)
   if (hits.size > 50_000) hits.clear()
   if (entry.count > MAX[kind]) {
+    if (entry.count === MAX[kind] + 1) console.warn(`[rate limit] ${kind} flood from ${key.slice(kind.length + 1)} (${MAX[kind]} per minute)`)
     const retry = String(Math.ceil((entry.start + WINDOW_MS - now) / 1000))
     return NextResponse.json({ error: 'Too many requests. Please wait a moment and try again.' }, { status: 429, headers: { 'Retry-After': retry } })
   }

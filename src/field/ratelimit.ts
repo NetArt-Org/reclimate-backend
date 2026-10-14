@@ -80,7 +80,11 @@ export async function limit(payload: Payload | null, name: LimitName, who: strin
   const l = LIMITS[name]
   const key = `${name}:${who}`
   const r = l.shared && payload ? await hitShared(payload, key, l.window, cost) : hitLocal(key, l.window, cost)
-  if (r.count > l.max) throw new RateLimited(r.resetIn)
+  if (r.count > l.max) {
+    // A trace for spotting abuse (Cloud Logging → search "[rate limit]"): once per window per caller, not per request.
+    if (r.count - cost <= l.max) console.warn(`[rate limit] ${name} exceeded by ${who} (${l.max} per ${l.window}s)`)
+    throw new RateLimited(r.resetIn)
+  }
 }
 
 export class RateLimited extends FieldError {
