@@ -8,9 +8,12 @@ Hosted on **Firebase App Hosting**. It is the single source of truth for both fi
 ## First run
 
 ```bash
-cp .env.example .env     # DATABASE_URL, PAYLOAD_SECRET, the Firebase values, ADMIN_EMAILS
+cp .env.example .env.development   # LOCAL: local test database, http://localhost:3001 (used by dev and scripts)
+cp .env.example .env.production    # PRODUCTION: Neon, the live URL (used by build/start and NODE_ENV=production scripts)
+                                   # both git-ignored; .env.example explains every value
 npm install
-npm run migrate          # creates/updates the tables in Neon
+npm run migrate          # creates/updates the tables in the LOCAL database
+                         # production: NODE_ENV=production npm run migrate
 npm run dev              # http://localhost:3001/admin
 ```
 
