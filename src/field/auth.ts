@@ -12,9 +12,6 @@ import { bust, memo, TTL } from './cache'
  * signs in with Firebase — email + password or Google — and sends the Firebase ID token in `X-Field-Token`
  * (older builds: `Authorization: Bearer`). Here the token is verified and matched to the `people` row, which
  * decides role, network and sites.
- *
- * Why not `Authorization`: Firebase App Hosting's edge acts on a genuine Firebase ID token in that header and
- * answers 500 itself, before the request reaches this server (seen 2026-10-26).
  */
 
 /** The Firebase ID token of a request: `X-Field-Token`, or `Authorization: Bearer` from older app builds. */
