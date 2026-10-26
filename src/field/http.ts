@@ -19,7 +19,7 @@ export function cors(req: Request): Record<string, string> {
   if (!origin || !allowedOrigins().includes(origin)) return { Vary: 'Origin' }
   return {
     'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type, Range, If-None-Match, X-App-Version, X-Device-Model, X-App-Mode, X-Firebase-AppCheck',
+    'Access-Control-Allow-Headers': 'X-Field-Token, Authorization, Content-Type, Range, If-None-Match, X-App-Version, X-Device-Model, X-App-Mode, X-Firebase-AppCheck',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     'Access-Control-Expose-Headers': 'Content-Range, Content-Length, ETag, Retry-After',
     'Access-Control-Max-Age': '600',

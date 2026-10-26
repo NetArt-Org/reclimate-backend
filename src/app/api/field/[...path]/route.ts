@@ -5,7 +5,7 @@ import { getPayload } from 'payload'
 
 import { DASHBOARD_TAG } from '@/dashboard/server/payload'
 import { deleteAccount, getFile, passwordChanged, register, registerOptions, registerStatus, saveProfile, uploadFile } from '@/field/account'
-import { authenticate, FieldError, verifyToken, type FieldContext } from '@/field/auth'
+import { authenticate, FieldError, tokenFrom, verifyToken, type FieldContext } from '@/field/auth'
 import { batchPage, isBatchFilter, reviewBatch, saveBatch } from '@/field/batches'
 import { bootstrap } from '@/field/bootstrap'
 import { bust } from '@/field/cache'
@@ -22,7 +22,7 @@ import { once } from '@/field/idempotency'
 
 /**
  * The field app's API (/api/field/...). Every request carries the person's Firebase ID token
- * (`Authorization: Bearer`, see src/field/auth.ts) and, optionally, the site it works on (`?site=<id>`).
+ * (`X-Field-Token`, or `Authorization: Bearer` from older builds; see src/field/auth.ts) and, optionally, the site it works on (`?site=<id>`).
  * The backend is the single source of truth: both app layouts (step-by-step and Classic) read and write
  * the same records through these routes, and every rule and limit the app applies comes from here.
  * Every route is rate limited (src/field/ratelimit.ts); GET replies carry an ETag (an unchanged poll is a 304).
@@ -149,7 +149,7 @@ async function handle(req: Request, { params }: Ctx): Promise<Response> {
   try {
     const url = new URL(req.url)
     // Requests without a sign-in are limited per address before any work is done.
-    if (!req.headers.get('authorization')) await limit(null, 'anonymous', clientIp(req))
+    if (!tokenFrom(req)) await limit(null, 'anonymous', clientIp(req))
     checkAppVersion(req)
     await checkAppCheck(req)
     const out = await route(req, (await params).path, url)
@@ -163,7 +163,7 @@ async function handle(req: Request, { params }: Ctx): Promise<Response> {
   } catch (err) {
     // Rejected sign-ins also count against the address, so a bad or stolen token cannot be tried endlessly.
     // (Requests with no token at all were already counted above.)
-    if (err instanceof FieldError && err.code === 'signed_out' && req.headers.get('authorization')) {
+    if (err instanceof FieldError && err.code === 'signed_out' && tokenFrom(req)) {
       try {
         await limit(null, 'anonymous', clientIp(req))
       } catch (limited) {

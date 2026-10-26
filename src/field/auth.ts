@@ -9,10 +9,19 @@ import { bust, memo, TTL } from './cache'
 /**
  * Sign-in for the field app (Artisan Pro on phones). People get a login from an admin (Networks & people →
  * person → App login), or sign up in the app (Register now) and wait for an admin to approve them. The app
- * signs in with Firebase — email + password or Google — and sends the Firebase ID token as
- * `Authorization: Bearer`. Here the token is verified and matched to the `people` row, which decides role,
- * network and sites.
+ * signs in with Firebase — email + password or Google — and sends the Firebase ID token in `X-Field-Token`
+ * (older builds: `Authorization: Bearer`). Here the token is verified and matched to the `people` row, which
+ * decides role, network and sites.
+ *
+ * Why not `Authorization`: Firebase App Hosting's edge acts on a genuine Firebase ID token in that header and
+ * answers 500 itself, before the request reaches this server (seen 2026-10-26).
  */
+
+/** The Firebase ID token of a request: `X-Field-Token`, or `Authorization: Bearer` from older app builds. */
+export function tokenFrom(req: Request): string | undefined {
+  const raw = req.headers.get('x-field-token') ?? req.headers.get('authorization')?.match(/^Bearer (.*)$/)?.[1]
+  return raw && /^[\w.-]{20,4096}$/.test(raw) ? raw : undefined
+}
 
 export type FieldRole = 'worker' | 'sup'
 
@@ -63,7 +72,7 @@ export interface VerifiedToken {
 
 /** Verify the Firebase ID token only (used by Register now, before a person exists). */
 export async function verifyToken(req: Request): Promise<VerifiedToken> {
-  const token = req.headers.get('authorization')?.match(/^Bearer ([\w.-]{20,4096})$/)?.[1]
+  const token = tokenFrom(req)
   if (!token) throw new FieldError(401, 'Please sign in again.', 'signed_out')
   const { firebaseAuth, isFirebaseConfigured } = await import('@/lib/firebase/admin')
   if (!isFirebaseConfigured()) throw new FieldError(503, 'Sign-in is not set up on the server yet.', 'not_configured')
@@ -80,7 +89,7 @@ export async function verifyToken(req: Request): Promise<VerifiedToken> {
 }
 
 async function checkNotRevoked(req: Request) {
-  const token = req.headers.get('authorization')?.slice('Bearer '.length) ?? ''
+  const token = tokenFrom(req) ?? ''
   const { firebaseAuth } = await import('@/lib/firebase/admin')
   try {
     await firebaseAuth().verifyIdToken(token, true)
