@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { Button, Field, Input, Modal, NativeSelect, Switch } from '../components/ui'
 import { NETWORK_TYPE_LABEL, ROLE_LABEL } from '../data/catalog'
 import { useDashboard } from '../data/store'
-import type { Network, NetworkType, Role, User } from '../data/types'
+import type { Network, NetworkType, PartnerOrg, Role, User } from '../data/types'
 import { parseKml } from '../lib/files'
 import { day } from '../lib/utils'
 
@@ -18,39 +18,66 @@ const MapView = dynamic(() => import('../home/MapView').then((m) => m.MapView), 
 /* Partner organisation                                                */
 /* ------------------------------------------------------------------ */
 
-export function OrgDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
-  const { data, addOrg } = useDashboard()
-  const [name, setName] = useState('')
-  const [code, setCode] = useState('')
+export function OrgDialog({ open, onOpenChange, org }: { open: boolean; onOpenChange: (o: boolean) => void; org?: PartnerOrg }) {
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={org ? `Edit ${org.name}` : 'New partner organisation'}
+      description={org ? undefined : 'The company or cooperative that runs one or more networks.'}
+    >
+      {open && <OrgForm key={org?.id ?? 'new'} org={org} onDone={() => onOpenChange(false)} />}
+    </Modal>
+  )
+}
+
+function OrgForm({ org, onDone }: { org?: PartnerOrg; onDone: () => void }) {
+  const { data, addOrg, updateOrg } = useDashboard()
+  const [f, setF] = useState({ name: org?.name ?? '', code: org?.code ?? '', country: org?.country ?? '', address: org?.address ?? '' })
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }))
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    const c = code.trim().toUpperCase()
-    if (data.orgs.some((o) => o.code === c)) return toast.error(`Code ${c} is already used`)
-    addOrg({ name: name.trim(), code: c, active: true })
-    toast.success(`${name.trim()} added`)
-    setName('')
-    setCode('')
-    onOpenChange(false)
+    const c = f.code.trim().toUpperCase()
+    const name = f.name.trim()
+    if (data.orgs.some((o) => o.id !== org?.id && o.code === c)) return toast.error(`Code ${c} is already used`)
+    const fields = { name, code: c, country: f.country.trim() || undefined, address: f.address.trim() || undefined }
+    if (org) {
+      updateOrg(org.id, (o) => void Object.assign(o, fields))
+      toast.success('Saved')
+    } else {
+      addOrg({ ...fields, active: true })
+      toast.success(`${name} added`)
+    }
+    onDone()
   }
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title="New partner organisation" description="The company or cooperative that runs one or more networks.">
-      <form id="org-form" onSubmit={submit} className="flex flex-col gap-4">
-        <Field label="Name">
-          <Input required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sabah Biochar Cooperative" />
+    <form onSubmit={submit} className="flex flex-col gap-4">
+      <Field label="Name">
+        <Input required autoFocus value={f.name} onChange={set('name')} placeholder="e.g. Sabah Biochar Cooperative" />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Code" hint="Short, unique, e.g. MY02">
+          <Input required maxLength={6} value={f.code} onChange={set('code')} placeholder="MY02" className="uppercase" />
         </Field>
-        <Field label="Code" hint="Short, unique — shown next to the name, e.g. MY02">
-          <Input required maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} placeholder="MY02" className="uppercase" />
+        <Field label="Country">
+          <Input value={f.country} onChange={set('country')} placeholder="Malaysia" />
         </Field>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="submit" variant="primary">
-            Add organisation
-          </Button>
-        </div>
-      </form>
-    </Modal>
+      </div>
+      <Field label="Address">
+        <Input value={f.address} onChange={set('address')} />
+      </Field>
+      {org && org.code !== f.code.trim().toUpperCase() && (
+        <p className="rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn">Batch codes already issued keep the old code; new ones use the new code.</p>
+      )}
+      <div className="flex justify-end gap-2 pt-2">
+        <Button onClick={onDone}>Cancel</Button>
+        <Button type="submit" variant="primary">
+          {org ? 'Save changes' : 'Add organisation'}
+        </Button>
+      </div>
+    </form>
   )
 }
 
@@ -63,63 +90,99 @@ export function NetworkDialog({
   open,
   onOpenChange,
   onCreated,
+  network,
 }: {
   type: NetworkType
   open: boolean
   onOpenChange: (o: boolean) => void
-  onCreated: (id: string) => void
+  onCreated?: (id: string) => void
+  /** Edit this network instead of creating one. */
+  network?: Network
 }) {
-  const { data, filters, addNetwork } = useDashboard()
-  const [form, setForm] = useState({ name: '', orgId: '', location: '', lat: '', lng: '' })
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={network ? `Edit ${network.name}` : `New ${NETWORK_TYPE_LABEL[type]} network`}
+      description={network ? undefined : type === 'artisan' ? 'A group of kiln sites run by artisans.' : 'A network of farmers who apply biochar.'}
+    >
+      {open && <NetworkForm key={network?.id ?? 'new'} type={type} network={network} onCreated={onCreated} onDone={() => onOpenChange(false)} />}
+    </Modal>
+  )
+}
+
+function NetworkForm({ type, network, onCreated, onDone }: { type: NetworkType; network?: Network; onCreated?: (id: string) => void; onDone: () => void }) {
+  const { data, filters, addNetwork, updateNetwork } = useDashboard()
+  const [form, setForm] = useState({
+    name: network?.name ?? '',
+    orgId: network?.orgId ?? '',
+    code: network?.code ?? '',
+    location: network?.location ?? '',
+    lat: network?.lat != null ? String(network.lat) : '',
+    lng: network?.lng != null ? String(network.lng) : '',
+  })
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }))
   const orgId = form.orgId || filters.orgId || data.orgs.find((o) => o.active)?.id || ''
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    const lat = Number(form.lat)
-    const lng = Number(form.lng)
-    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return toast.error('Latitude must be −90…90 and longitude −180…180')
-    const id = addNetwork({ type, orgId, name: form.name.trim(), location: form.location.trim(), lat, lng, active: true, ceresApproved: false })
-    toast.success(`${form.name.trim()} added — set its feedstocks with "Edit config"`)
-    setForm({ name: '', orgId: '', location: '', lat: '', lng: '' })
-    onOpenChange(false)
-    onCreated(id)
+    const lat = form.lat.trim() === '' ? null : Number(form.lat)
+    const lng = form.lng.trim() === '' ? null : Number(form.lng)
+    if ((lat == null) !== (lng == null)) return toast.error('Enter both latitude and longitude, or neither')
+    if ((lat != null && (Number.isNaN(lat) || Math.abs(lat) > 90)) || (lng != null && (Number.isNaN(lng) || Math.abs(lng) > 180))) {
+      return toast.error('Latitude must be −90…90 and longitude −180…180')
+    }
+    const fields = { orgId, name: form.name.trim(), code: form.code.trim() || undefined, location: form.location.trim(), lat, lng }
+    if (network) {
+      updateNetwork(network.id, fields)
+      toast.success('Saved')
+      onDone()
+      return
+    }
+    if (lat == null) return toast.error('Enter the location coordinates')
+    const id = addNetwork({ ...fields, type, active: true, ceresApproved: false })
+    toast.success(`${fields.name} added — set its feedstocks with "Edit config"`)
+    onDone()
+    onCreated?.(id)
   }
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title={`New ${NETWORK_TYPE_LABEL[type]} network`} description={type === 'artisan' ? 'A group of kiln sites run by artisans.' : 'A network of farmers who apply biochar.'}>
-      <form onSubmit={submit} className="flex flex-col gap-4">
-        <Field label="Name">
-          <Input required autoFocus value={form.name} onChange={set('name')} placeholder="e.g. Tawau Kiln Group" />
+    <form onSubmit={submit} className="flex flex-col gap-4">
+      <Field label="Name">
+        <Input required autoFocus value={form.name} onChange={set('name')} placeholder="e.g. Tawau Kiln Group" />
+      </Field>
+      <Field label="Partner organisation">
+        <NativeSelect required value={orgId} onChange={set('orgId')}>
+          {data.orgs.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name} ({o.code}){o.active ? '' : ' — inactive'}
+            </option>
+          ))}
+        </NativeSelect>
+      </Field>
+      {network && (
+        <Field label="Code" hint="Used in batch IDs, e.g. MY01A001P04">
+          <Input value={form.code} onChange={set('code')} />
         </Field>
-        <Field label="Partner organisation">
-          <NativeSelect required value={orgId} onChange={set('orgId')}>
-            {data.orgs.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name} ({o.code}){o.active ? '' : ' — inactive'}
-              </option>
-            ))}
-          </NativeSelect>
+      )}
+      <Field label="Location">
+        <Input required value={form.location} onChange={set('location')} placeholder="Village, district" />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Latitude">
+          <Input required={!network} type="number" step="any" value={form.lat} onChange={set('lat')} placeholder="4.2448" />
         </Field>
-        <Field label="Location">
-          <Input required value={form.location} onChange={set('location')} placeholder="Village, district" />
+        <Field label="Longitude">
+          <Input required={!network} type="number" step="any" value={form.lng} onChange={set('lng')} placeholder="117.8912" />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Latitude">
-            <Input required type="number" step="any" value={form.lat} onChange={set('lat')} placeholder="4.2448" />
-          </Field>
-          <Field label="Longitude">
-            <Input required type="number" step="any" value={form.lng} onChange={set('lng')} placeholder="117.8912" />
-          </Field>
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="submit" variant="primary">
-            Add network
-          </Button>
-        </div>
-      </form>
-    </Modal>
+      </div>
+      <div className="flex justify-end gap-2 pt-2">
+        <Button onClick={onDone}>Cancel</Button>
+        <Button type="submit" variant="primary">
+          {network ? 'Save changes' : 'Add network'}
+        </Button>
+      </div>
+    </form>
   )
 }
 

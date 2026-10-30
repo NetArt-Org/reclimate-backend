@@ -154,6 +154,7 @@ export const Vehicles: CollectionConfig = {
     { name: 'type', type: 'text' },
     { name: 'fuel', type: 'text' },
     num('emissionFactor'),
+    { name: 'active', type: 'checkbox', defaultValue: true },
     raw,
   ],
 }
@@ -185,6 +186,7 @@ export const Containers: CollectionConfig = {
     { name: 'inUse', type: 'checkbox', defaultValue: false },
     { name: 'filled', type: 'checkbox', defaultValue: false },
     { name: 'addedAt', type: 'date' },
+    { name: 'active', type: 'checkbox', defaultValue: true },
     raw,
   ],
 }

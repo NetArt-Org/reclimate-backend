@@ -414,6 +414,7 @@ export interface Vehicle {
   type?: string | null;
   fuel?: string | null;
   emissionFactor?: number | null;
+  active?: boolean | null;
   raw?:
     | {
         [k: string]: unknown;
@@ -451,6 +452,7 @@ export interface Container {
   inUse?: boolean | null;
   filled?: boolean | null;
   addedAt?: string | null;
+  active?: boolean | null;
   raw?:
     | {
         [k: string]: unknown;
@@ -515,6 +517,7 @@ export interface Feedstock {
    */
   bulkDensity?: number | null;
   volumeTracking?: boolean | null;
+  active?: boolean | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -561,6 +564,10 @@ export interface Batch {
   shortTermSinkT?: number | null;
   kilnVolumeL?: number | null;
   samplingContainer?: (string | null) | Container;
+  voided?: boolean | null;
+  voidReason?: string | null;
+  voidedBy?: string | null;
+  voidedAt?: string | null;
   raw?:
     | {
         [k: string]: unknown;
@@ -593,6 +600,10 @@ export interface BiomassCollection {
   distanceKm?: number | null;
   emissions?: number | null;
   biomassSource?: (string | null) | BiomassSource;
+  voided?: boolean | null;
+  voidReason?: string | null;
+  voidedBy?: string | null;
+  voidedAt?: string | null;
   raw?:
     | {
         [k: string]: unknown;
@@ -625,6 +636,10 @@ export interface Mixing {
   bagsAvailable?: number | null;
   description?: string | null;
   rejectedBiocharL?: number | null;
+  voided?: boolean | null;
+  voidReason?: string | null;
+  voidedBy?: string | null;
+  voidedAt?: string | null;
   raw?:
     | {
         [k: string]: unknown;
@@ -656,6 +671,10 @@ export interface Packaging {
   bagsRemaining?: number | null;
   description?: string | null;
   rejectedBiocharL?: number | null;
+  voided?: boolean | null;
+  voidReason?: string | null;
+  voidedBy?: string | null;
+  voidedAt?: string | null;
   raw?:
     | {
         [k: string]: unknown;
@@ -685,6 +704,10 @@ export interface Inventory {
   actualQuantity?: number | null;
   packedAt?: string | null;
   status?: string | null;
+  voided?: boolean | null;
+  voidReason?: string | null;
+  voidedBy?: string | null;
+  voidedAt?: string | null;
   raw?:
     | {
         [k: string]: unknown;
@@ -729,6 +752,10 @@ export interface Application {
   bags?: number | null;
   open?: boolean | null;
   fullySinked?: boolean | null;
+  voided?: boolean | null;
+  voidReason?: string | null;
+  voidedBy?: string | null;
+  voidedAt?: string | null;
   raw?:
     | {
         [k: string]: unknown;
@@ -912,7 +939,19 @@ export interface ActivityLog {
   message: string;
   network?: (string | null) | Network;
   by?: string | null;
+  byEmail?: string | null;
   actionType?: string | null;
+  entity?: string | null;
+  entityId?: string | null;
+  changes?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   at?: string | null;
   updatedAt: string;
   createdAt: string;
@@ -1256,6 +1295,7 @@ export interface VehiclesSelect<T extends boolean = true> {
   type?: T;
   fuel?: T;
   emissionFactor?: T;
+  active?: T;
   raw?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1277,6 +1317,7 @@ export interface ContainersSelect<T extends boolean = true> {
   inUse?: T;
   filled?: T;
   addedAt?: T;
+  active?: T;
   raw?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1311,6 +1352,7 @@ export interface FeedstocksSelect<T extends boolean = true> {
   carbonContent?: T;
   bulkDensity?: T;
   volumeTracking?: T;
+  active?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -1349,6 +1391,10 @@ export interface BatchesSelect<T extends boolean = true> {
   shortTermSinkT?: T;
   kilnVolumeL?: T;
   samplingContainer?: T;
+  voided?: T;
+  voidReason?: T;
+  voidedBy?: T;
+  voidedAt?: T;
   raw?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1373,6 +1419,10 @@ export interface BiomassCollectionsSelect<T extends boolean = true> {
   distanceKm?: T;
   emissions?: T;
   biomassSource?: T;
+  voided?: T;
+  voidReason?: T;
+  voidedBy?: T;
+  voidedAt?: T;
   raw?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1397,6 +1447,10 @@ export interface MixingsSelect<T extends boolean = true> {
   bagsAvailable?: T;
   description?: T;
   rejectedBiocharL?: T;
+  voided?: T;
+  voidReason?: T;
+  voidedBy?: T;
+  voidedAt?: T;
   raw?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1420,6 +1474,10 @@ export interface PackagingsSelect<T extends boolean = true> {
   bagsRemaining?: T;
   description?: T;
   rejectedBiocharL?: T;
+  voided?: T;
+  voidReason?: T;
+  voidedBy?: T;
+  voidedAt?: T;
   raw?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1441,6 +1499,10 @@ export interface InventoriesSelect<T extends boolean = true> {
   actualQuantity?: T;
   packedAt?: T;
   status?: T;
+  voided?: T;
+  voidReason?: T;
+  voidedBy?: T;
+  voidedAt?: T;
   raw?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1469,6 +1531,10 @@ export interface ApplicationsSelect<T extends boolean = true> {
   bags?: T;
   open?: T;
   fullySinked?: T;
+  voided?: T;
+  voidReason?: T;
+  voidedBy?: T;
+  voidedAt?: T;
   raw?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1588,7 +1654,11 @@ export interface ActivityLogsSelect<T extends boolean = true> {
   message?: T;
   network?: T;
   by?: T;
+  byEmail?: T;
   actionType?: T;
+  entity?: T;
+  entityId?: T;
+  changes?: T;
   at?: T;
   updatedAt?: T;
   createdAt?: T;

@@ -12,12 +12,12 @@ import { saveBiomassSource, saveVehicle, type BiomassSourceRow, type VehicleRow 
 const FUELS = ['Diesel', 'Petrol', 'CNG', 'LPG', 'Electric', 'None']
 
 /** "" → null, "1,5" → 1.5, garbage → NaN (rejected on submit). */
-const parseNum = (v: string) => {
+export const parseNum = (v: string) => {
   const t = v.trim().replace(',', '.')
   return t === '' ? null : Number(t)
 }
 
-function SiteSelect({ network, value, onChange }: { network: Network; value: string; onChange: (v: string) => void }) {
+export function SiteSelect({ network, value, onChange }: { network: Network; value: string; onChange: (v: string) => void }) {
   const { data } = useDashboard()
   const sites = data.sites.filter((s) => s.networkId === network.id)
   return (
@@ -32,7 +32,19 @@ function SiteSelect({ network, value, onChange }: { network: Network; value: str
   )
 }
 
-function Footer({ formId, saving, onCancel, label }: { formId: string; saving: boolean; onCancel: () => void; label: string }) {
+export function ActiveSwitch({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint: string }) {
+  return (
+    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-line px-4 py-3">
+      <span>
+        <span className="block text-sm font-semibold">{label}</span>
+        <span className="block text-xs text-ink-muted">{hint}</span>
+      </span>
+      <Switch checked={checked} onCheckedChange={onChange} aria-label={label} />
+    </label>
+  )
+}
+
+export function Footer({ formId, saving, onCancel, label }: { formId: string; saving: boolean; onCancel: () => void; label: string }) {
   return (
     <div className="flex justify-end gap-2">
       <Button onClick={onCancel} disabled={saving}>
@@ -86,6 +98,7 @@ function VehicleForm({
     fuel: v?.fuel ?? '',
     factor: v?.emissionFactor != null ? String(v.emissionFactor) : '',
   })
+  const [active, setActive] = useState(v?.active ?? true)
   const [saving, setSaving] = useState(false)
   const set = (k: keyof typeof f) => (val: string) => setF((x) => ({ ...x, [k]: val }))
 
@@ -105,6 +118,7 @@ function VehicleForm({
         type: f.type,
         fuel: f.fuel,
         emissionFactor: factor,
+        active,
       }))
       onSaved(row, !v)
       toast.success(v ? 'Vehicle saved' : 'Vehicle added')
@@ -146,6 +160,7 @@ function VehicleForm({
           <SiteSelect network={network} value={f.siteId} onChange={set('siteId')} />
         </Field>
       </div>
+      <ActiveSwitch checked={active} onChange={setActive} label="In use" hint="Turn off when the vehicle is sold or no longer used. Past collections keep it." />
       <div className="mt-2 border-t border-line pt-4">
         <Footer formId="vehicle-form" saving={saving} onCancel={() => onOpenChange(false)} label={v ? 'Save vehicle' : 'Add vehicle'} />
       </div>

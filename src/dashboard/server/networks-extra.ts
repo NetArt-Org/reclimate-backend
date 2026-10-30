@@ -3,6 +3,7 @@
 import { randomUUID } from 'crypto'
 import type { Where } from 'payload'
 
+import { record, recordSave } from './audit'
 import { relId, relIds, requireAdmin } from './payload'
 import { guard, UserError } from './result'
 
@@ -43,6 +44,7 @@ export interface MeasuringContainer {
   dimensions: Dimensions
   volumeL: number | null
   inUse: boolean
+  active: boolean
   photo: Photo | null
 }
 
@@ -58,6 +60,7 @@ export interface SamplingContainer {
   dueAt: string | null
   /** dueAt is today or earlier. */
   due: boolean
+  active: boolean
   photo: Photo | null
 }
 
@@ -70,6 +73,7 @@ export interface VehicleRow {
   fuel: string
   /** kg CO₂ per km (as recorded in Circonomy). */
   emissionFactor: number | null
+  active: boolean
   photo: Photo | null
 }
 
@@ -104,6 +108,16 @@ export interface NetworkExtras {
   sources: BiomassSourceRow[]
   /** Farmers and kiln operators of the network. */
   people: FieldPerson[]
+  /** The field app's per-site pick lists: packaging bags, preferred crops, buyers. */
+  lists: SiteListItem[]
+}
+
+export interface SiteListItem {
+  id: string
+  siteId: string
+  category: 'bags' | 'crops' | 'buyers'
+  name: string
+  detail: string
 }
 
 /* ------------------------------------------------------------------ */
@@ -155,7 +169,7 @@ export async function getNetworkExtras(networkId: string) {
       ? { or: [{ network: { equals: networkId } }, { site: { in: siteIds } }] }
       : { network: { equals: networkId } }
 
-    const [kilns, containers, vehicles, sources, people] = await Promise.all([
+    const [kilns, containers, vehicles, sources, people, lists] = await Promise.all([
       siteIds.length
         ? payload.find({ collection: 'kilns', where: { site: { in: siteIds } }, select: { site: true, shape: true, dimensions: true, volumeM3: true }, ...common })
         : Promise.resolve({ docs: [] }),
@@ -169,6 +183,9 @@ export async function getNetworkExtras(networkId: string) {
         select: { name: true, role: true, phone: true, address: true, sites: true, active: true },
         ...common,
       }),
+      siteIds.length
+        ? payload.find({ collection: 'site-lists', where: { site: { in: siteIds } }, sort: 'name', select: { site: true, category: true, name: true, detail: true }, ...common })
+        : Promise.resolve({ docs: [] }),
     ])
 
     // Photos: first image per kiln / container / vehicle, preferring ones already copied.
@@ -203,7 +220,7 @@ export async function getNetworkExtras(networkId: string) {
     const measuring: MeasuringContainer[] = []
     const sampling: SamplingContainer[] = []
     for (const c of containers.docs) {
-      const base = { id: String(c.id), siteId: relId(c.site) ?? null, code: s(c.code), name: s(c.name), volumeL: numOrNull(c.volumeL), photo: photo(c.id) }
+      const base = { id: String(c.id), siteId: relId(c.site) ?? null, code: s(c.code), name: s(c.name), volumeL: numOrNull(c.volumeL), active: c.active !== false, photo: photo(c.id) }
       if (c.kind === 'sampling') {
         const dueAt = c.addedAt ? plusSixMonths(c.addedAt) : null
         sampling.push({
@@ -242,6 +259,7 @@ export async function getNetworkExtras(networkId: string) {
         type: s(v.type),
         fuel: s(v.fuel),
         emissionFactor: numOrNull(v.emissionFactor),
+        active: v.active !== false,
         photo: photo(v.id),
       })),
       sources: sources.docs.map((b) => ({
@@ -261,6 +279,13 @@ export async function getNetworkExtras(networkId: string) {
         address: s(p.address),
         siteIds: relIds(p.sites),
         active: p.active !== false,
+      })),
+      lists: lists.docs.map((l) => ({
+        id: String(l.id),
+        siteId: relId((l as { site?: unknown }).site) ?? '',
+        category: (l as { category: SiteListItem['category'] }).category,
+        name: s((l as { name?: unknown }).name),
+        detail: s((l as { detail?: unknown }).detail),
       })),
     }
   })()
@@ -286,12 +311,14 @@ export interface VehicleInput {
   type: string
   fuel: string
   emissionFactor: number | null
+  active: boolean
 }
 
 /** Add or update a vehicle. Returns the saved row. */
 export async function saveVehicle(input: VehicleInput) {
   return guard(async (): Promise<VehicleRow> => {
-    const { payload } = await requireAdmin()
+    const admin = await requireAdmin()
+    const { payload } = admin
     const plate = input.plate.trim()
     if (!plate) throw new UserError('Enter the number plate')
     if (input.emissionFactor != null && (!Number.isFinite(input.emissionFactor) || input.emissionFactor < 0)) {
@@ -306,10 +333,13 @@ export async function saveVehicle(input: VehicleInput) {
       type: input.type.trim() || null,
       fuel: input.fuel.trim() || null,
       emissionFactor: input.emissionFactor,
+      active: input.active !== false,
     }
+    const before = input.id ? await payload.findByID({ collection: 'vehicles', id: input.id, depth: 0, select: { raw: false }, overrideAccess: true }).catch(() => null) : null
     const doc = input.id
       ? await payload.update({ collection: 'vehicles', id: input.id, data, depth: 0, select: { raw: false }, overrideAccess: true })
       : await payload.create({ collection: 'vehicles', data: { id: randomUUID(), ...data }, depth: 0, select: { raw: false }, overrideAccess: true })
+    await recordSave(admin, { entity: 'vehicles', entityId: String(doc.id), label: 'Vehicle', name: data.name || plate, before, data, network: input.networkId })
     return {
       id: String(doc.id),
       siteId: relId(doc.site) ?? null,
@@ -318,6 +348,7 @@ export async function saveVehicle(input: VehicleInput) {
       type: s(doc.type),
       fuel: s(doc.fuel),
       emissionFactor: numOrNull(doc.emissionFactor),
+      active: doc.active !== false,
       photo: null,
     }
   })()
@@ -337,7 +368,8 @@ export interface BiomassSourceInput {
 /** Add or update a biomass source (FPU). Returns the saved row. */
 export async function saveBiomassSource(input: BiomassSourceInput) {
   return guard(async (): Promise<BiomassSourceRow> => {
-    const { payload } = await requireAdmin()
+    const admin = await requireAdmin()
+    const { payload } = admin
     const name = input.name.trim()
     if (!name) throw new UserError('Enter a name')
     if ((input.lat == null) !== (input.lng == null)) throw new UserError('Enter both latitude and longitude, or neither')
@@ -353,9 +385,11 @@ export async function saveBiomassSource(input: BiomassSourceInput) {
       lng: input.lng,
       active: input.active,
     }
+    const before = input.id ? await payload.findByID({ collection: 'biomass-sources', id: input.id, depth: 0, select: { raw: false, kml: false }, overrideAccess: true }).catch(() => null) : null
     const doc = input.id
       ? await payload.update({ collection: 'biomass-sources', id: input.id, data, depth: 0, select: { raw: false, kml: false }, overrideAccess: true })
       : await payload.create({ collection: 'biomass-sources', data: { id: randomUUID(), ...data }, depth: 0, select: { raw: false, kml: false }, overrideAccess: true })
+    await recordSave(admin, { entity: 'biomass-sources', entityId: String(doc.id), label: 'Biomass source', name, before, data, network: input.networkId })
     return {
       id: String(doc.id),
       siteId: relId(doc.site) ?? null,
@@ -365,5 +399,97 @@ export async function saveBiomassSource(input: BiomassSourceInput) {
       lng: numOrNull(doc.lng),
       active: doc.active !== false,
     }
+  })()
+}
+
+export interface ContainerInput {
+  id?: string
+  networkId: string
+  siteId: string | null
+  kind: 'measuring' | 'sampling'
+  code: string
+  name: string
+  shape: string
+  /** mm */
+  dimensions: Dimensions
+  volumeL: number | null
+  inUse: boolean
+  filled: boolean
+  addedAt: string | null
+  active: boolean
+}
+
+/** Add or update a measuring or sampling container. The extras are reloaded afterwards. */
+export async function saveContainer(input: ContainerInput) {
+  return guard(async () => {
+    const admin = await requireAdmin()
+    const { payload } = admin
+    if (input.kind !== 'measuring' && input.kind !== 'sampling') throw new UserError('Choose measuring or sampling')
+    const code = input.code.trim()
+    const name = input.name.trim()
+    if (!code && !name) throw new UserError('Enter a code or a name')
+    if (input.volumeL != null && (!Number.isFinite(input.volumeL) || input.volumeL < 0 || input.volumeL > 100_000)) throw new UserError('The volume must be between 0 and 100,000 L')
+    const dimensions: Dimensions = {}
+    for (const [k, v] of Object.entries(input.dimensions ?? {}).slice(0, 12)) {
+      if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) throw new UserError('Dimensions must be positive numbers')
+      dimensions[k.slice(0, 40)] = v
+    }
+    if (input.addedAt && Number.isNaN(Date.parse(input.addedAt))) throw new UserError('Enter a valid date')
+    await checkSite(payload, input.networkId, input.siteId)
+    const data = {
+      kind: input.kind,
+      network: input.networkId,
+      site: input.siteId,
+      code: code || null,
+      name: name || null,
+      shape: input.shape.trim() || null,
+      dimensions,
+      volumeL: input.volumeL,
+      inUse: input.inUse === true,
+      filled: input.filled === true,
+      addedAt: input.addedAt || null,
+      active: input.active !== false,
+    }
+    const before = input.id ? await payload.findByID({ collection: 'containers', id: input.id, depth: 0, select: { raw: false }, overrideAccess: true }).catch(() => null) : null
+    const doc = input.id
+      ? await payload.update({ collection: 'containers', id: input.id, data, depth: 0, select: { raw: false }, overrideAccess: true })
+      : await payload.create({ collection: 'containers', data: { id: randomUUID(), ...data }, depth: 0, select: { raw: false }, overrideAccess: true })
+    const label = input.kind === 'sampling' ? 'Sampling container' : 'Measuring container'
+    await recordSave(admin, { entity: 'containers', entityId: String(doc.id), label, name: code || name, before, data, network: input.networkId })
+  })()
+}
+
+const LIST_CATEGORIES = ['bags', 'crops', 'buyers'] as const
+const LIST_LABEL: Record<SiteListItem['category'], string> = { bags: 'Packaging bag', crops: 'Preferred crop', buyers: 'Buyer' }
+
+/** Add or rename an entry of a site's pick list (packaging bags, preferred crops, buyers). */
+export async function saveSiteListItem(input: { id?: string; networkId: string; siteId: string; category: SiteListItem['category']; name: string; detail: string }) {
+  return guard(async (): Promise<SiteListItem> => {
+    const admin = await requireAdmin()
+    const { payload } = admin
+    if (!(LIST_CATEGORIES as readonly string[]).includes(input.category)) throw new UserError('Unknown list')
+    const name = input.name.trim()
+    if (!name) throw new UserError('Enter a name')
+    if (name.length > 120 || input.detail.length > 300) throw new UserError('That is too long')
+    if (!input.siteId) throw new UserError('Choose a site')
+    await checkSite(payload, input.networkId, input.siteId)
+    const data = { site: input.siteId, category: input.category, name, detail: input.detail.trim() || null }
+    const before = input.id ? await payload.findByID({ collection: 'site-lists', id: input.id, depth: 0, overrideAccess: true }).catch(() => null) : null
+    const doc = input.id
+      ? await payload.update({ collection: 'site-lists', id: input.id, data, depth: 0, overrideAccess: true })
+      : await payload.create({ collection: 'site-lists', data: { id: randomUUID(), ...data }, depth: 0, overrideAccess: true } as never)
+    await recordSave(admin, { entity: 'site-lists', entityId: String(doc.id), label: LIST_LABEL[input.category], name, before, data, network: input.networkId })
+    return { id: String(doc.id), siteId: input.siteId, category: input.category, name, detail: data.detail ?? '' }
+  })()
+}
+
+export async function deleteSiteListItem(id: string, networkId: string) {
+  return guard(async () => {
+    const admin = await requireAdmin()
+    const item = await admin.payload.findByID({ collection: 'site-lists', id, depth: 0, overrideAccess: true }).catch(() => null)
+    if (!item) throw new UserError('This entry no longer exists')
+    await checkSite(admin.payload, networkId, relId(item.site) ?? null)
+    await admin.payload.delete({ collection: 'site-lists', id, overrideAccess: true })
+    await record(admin, { entity: 'site-lists', entityId: id, action: 'delete', message: `${LIST_LABEL[item.category as SiteListItem['category']] ?? 'Entry'} ${item.name} removed`, network: networkId })
   })()
 }

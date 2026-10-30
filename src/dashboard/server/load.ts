@@ -65,22 +65,22 @@ async function readDashboardData(): Promise<DashboardData> {
         sum(biochar_l * coalesce(bulk_density, 0)) / 1000 as biochar_t,
         sum(csink_t) as co2_t,
         sum(case when status = 'admin_approved' then csink_t else 0 end) as credits_t
-      from batches group by 1, 2, 3`),
+      from batches where voided is not true group by 1, 2, 3`),
     drizzle.execute(sql`
       select network_id, site_id, to_char(date, 'YYYY-MM') as month, ${BUCKET_SQL} as bucket, sum(csink_t) as co2_t
-      from batches group by 1, 2, 3, 4`),
+      from batches where voided is not true group by 1, 2, 3, 4`),
     // Sampling containers must be kept 6 months; flag the ones whose time is up (Circonomy raised these as alerts).
     drizzle.execute(sql`
       select c.id, c.code, c.added_at, c.network_id, n.name as network,
-        (select b.feedstock from batches b where b.sampling_container_id = c.id order by b.date desc limit 1) as feedstock
+        (select b.feedstock from batches b where b.sampling_container_id = c.id and b.voided is not true order by b.date desc limit 1) as feedstock
       from containers c left join networks n on n.id = c.network_id
       where c.kind = 'sampling' and c.added_at is not null and c.added_at + interval '6 months' <= now()
       order by c.added_at desc limit 50`),
     // Most recent batch per kiln and per site, to spot places that have stopped reporting.
     drizzle.execute(sql`
-      select 'kiln' as kind, kiln_id as id, max(date) as at from batches where kiln_id is not null group by kiln_id
+      select 'kiln' as kind, kiln_id as id, max(date) as at from batches where kiln_id is not null and voided is not true group by kiln_id
       union all
-      select 'site', site_id, max(date) from batches group by site_id`),
+      select 'site', site_id, max(date) from batches where voided is not true group by site_id`),
     payload.find({ collection: 'sell-requests', where: { status: { equals: 'pending' } }, depth: 1, overrideAccess: true, pagination: false, sort: '-createdAt' }),
     // People who signed up in the field app and wait for an admin.
     payload.find({ collection: 'people', where: { registrationStatus: { equals: 'pending' } }, depth: 1, overrideAccess: true, pagination: false, sort: '-createdAt', select: { name: true, email: true, phone: true, role: true, sites: true, networks: true, createdAt: true } }),
@@ -143,6 +143,7 @@ async function readDashboardData(): Promise<DashboardData> {
         networkId: relId(s.network)!,
         name: s.name,
         code: s.code ?? undefined,
+        address: s.address ?? undefined,
         lat: s.lat ?? null,
         lng: s.lng ?? null,
         active: !!s.active,
@@ -157,6 +158,8 @@ async function readDashboardData(): Promise<DashboardData> {
         code: k.code ?? undefined,
         type: k.type,
         volumeM3: k.volumeM3 ?? undefined,
+        shape: k.shape ?? undefined,
+        dimensions: (k.dimensions as Kiln['dimensions']) ?? undefined,
         lat: k.lat ?? null,
         lng: k.lng ?? null,
         active: !!k.active,
@@ -197,6 +200,7 @@ async function readDashboardData(): Promise<DashboardData> {
         bulkDensity: f.bulkDensity ?? null,
         carbonContent: f.carbonContent ?? null,
         volumeTracking: !!f.volumeTracking,
+        active: f.active !== false,
       }),
     ),
     production: (production.rows as Record<string, unknown>[]).map(

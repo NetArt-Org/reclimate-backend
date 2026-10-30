@@ -143,6 +143,14 @@ function useDashboardState(initial: DashboardData) {
           if (x) x.config = config
         }, saveNetwork(id)),
 
+      addSite: (x: Omit<Site, 'id' | 'lastBatchAt'>) => {
+        const id = newId()
+        mutate(
+          (d) => void d.sites.push({ ...x, id }),
+          (d) => server.saveSite(byId(d.sites, id)!),
+        )
+        return id
+      },
       updateSite: (id: string, patch: Partial<Site>) =>
         mutate(
           (d) => {
@@ -151,6 +159,14 @@ function useDashboardState(initial: DashboardData) {
           },
           (d) => server.saveSite(byId(d.sites, id)!),
         ),
+      addKiln: (x: Omit<Kiln, 'id' | 'lastBatchAt'>) => {
+        const id = newId()
+        mutate(
+          (d) => void d.kilns.push({ ...x, id }),
+          (d) => server.saveKiln(byId(d.kilns, id)!),
+        )
+        return id
+      },
       updateKiln: (id: string, patch: Partial<Kiln>) =>
         mutate(
           (d) => {

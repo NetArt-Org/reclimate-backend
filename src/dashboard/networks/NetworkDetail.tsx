@@ -1,15 +1,16 @@
 'use client'
 
-import { BadgeCheck, Factory, FileText, Flame, Globe, Hammer, MapPin, MoreHorizontal, Pencil, Workflow } from 'lucide-react'
+import { BadgeCheck, Factory, FileText, Flame, Globe, Hammer, History, MapPin, MoreHorizontal, Pencil, Workflow } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
-import { Badge, Button, Card, Menu, MenuContent, MenuItem, MenuTrigger, Tooltip } from '../components/ui'
+import { HistoryList } from '../components/HistoryPanel'
+import { Badge, Button, Card, Menu, MenuContent, MenuItem, MenuTrigger, Sheet, Tooltip } from '../components/ui'
 import { NETWORK_TYPE_LABEL } from '../data/catalog'
 import { useDashboard } from '../data/store'
 import type { Network } from '../data/types'
 import { cn, day, num } from '../lib/utils'
-import { KmlPanel } from './Dialogs'
+import { KmlPanel, NetworkDialog } from './Dialogs'
 import { EditConfigSheet } from './EditConfigSheet'
 import { PeopleTable } from './PeopleTable'
 import { SiteAssets, useNetworkExtras } from './SiteAssets'
@@ -21,6 +22,8 @@ export function NetworkDetail({ network: n, onAddUser, leading }: { network: Net
   const { data, updateNetwork } = useDashboard()
   const [tab, setTab] = useState<Tab>('people')
   const [editing, setEditing] = useState(false)
+  const [editingDetails, setEditingDetails] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const extras = useNetworkExtras(n.id)
   const info = extras.data?.network
   const samplingDue = extras.data?.sampling.filter((c) => c.due).length ?? 0
@@ -105,6 +108,12 @@ export function NetworkDetail({ network: n, onAddUser, leading }: { network: Net
               </Button>
             </MenuTrigger>
             <MenuContent>
+              <MenuItem onSelect={() => setEditingDetails(true)}>
+                <Pencil /> Edit name &amp; location
+              </MenuItem>
+              <MenuItem onSelect={() => setShowHistory(true)}>
+                <History /> History
+              </MenuItem>
               <MenuItem
                 onSelect={() => {
                   updateNetwork(n.id, { ceresApproved: !n.ceresApproved, certifiedAt: n.ceresApproved ? undefined : new Date().toISOString().slice(0, 10) })
@@ -167,6 +176,10 @@ export function NetworkDetail({ network: n, onAddUser, leading }: { network: Net
       </div>
 
       <EditConfigSheet network={n} open={editing} onOpenChange={setEditing} />
+      <NetworkDialog type={n.type} network={n} open={editingDetails} onOpenChange={setEditingDetails} />
+      <Sheet open={showHistory} onOpenChange={setShowHistory} title={`History · ${n.name}`}>
+        {showHistory && <HistoryList entity="networks" entityId={n.id} />}
+      </Sheet>
     </Card>
   )
 }

@@ -18,11 +18,14 @@ import {
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { HistoryButton } from '../components/HistoryPanel'
 import { useSession } from '../components/shell/session'
 import { OptionRow } from '../components/shell/PageHeader'
 import {
   Badge,
   Button,
+  Checkbox,
+  ConfirmDialog,
   Field,
   Input,
   Menu,
@@ -636,7 +639,8 @@ const STATUS: Record<
 function ProjectRegistry() {
   const { data, updateCompany } = useDashboard()
   const { user } = useSession()
-  const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState<Project | 'new' | null>(null)
+  const [removing, setRemoving] = useState<Project | null>(null)
   const projects = data.company.projects
   const netName = new Map(data.networks.map((n) => [n.id, n.name]))
 
@@ -645,9 +649,12 @@ function ProjectRegistry() {
       title="Project registry"
       description="Carbon projects, the registry they are with, and their validation status."
       action={
-        <Button size="sm" className="rounded-lg" onClick={() => setAdding(true)}>
-          <Plus /> Add project
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <HistoryButton entity="company" entityId="company" title="Company profile & projects" />
+          <Button size="sm" className="rounded-lg" onClick={() => setEditing('new')}>
+            <Plus /> Add project
+          </Button>
+        </div>
       }
     >
       {projects.length === 0 ? (
@@ -696,86 +703,107 @@ function ProjectRegistry() {
                   ))}
                 </MenuContent>
               </Menu>
+              <Button variant="ghost" size="icon-sm" aria-label={`Edit ${p.name}`} onClick={() => setEditing(p)}>
+                <Pencil />
+              </Button>
+              <Button variant="ghost" size="icon-sm" className="text-danger" aria-label={`Delete ${p.name}`} onClick={() => setRemoving(p)}>
+                <Trash2 />
+              </Button>
             </div>
           ))}
         </div>
       )}
-      <ProjectDialog open={adding} onOpenChange={setAdding} />
+      <ProjectDialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)} project={editing === 'new' ? undefined : (editing ?? undefined)} />
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(o) => !o && setRemoving(null)}
+        title={`Delete ${removing?.name ?? ''}?`}
+        message="The project is removed from the registry list. Batches and credits are not affected. The deletion is kept in the history."
+        onConfirm={() => {
+          if (!removing) return
+          updateCompany((c) => void (c.projects = c.projects.filter((x) => x.id !== removing.id)), { by: user.name, change: `Project deleted: ${removing.name}` })
+          toast.success('Project deleted')
+        }}
+      />
     </Section>
   )
 }
 
-function ProjectDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean
-  onOpenChange: (o: boolean) => void
-}) {
+function ProjectDialog({ open, onOpenChange, project }: { open: boolean; onOpenChange: (o: boolean) => void; project?: Project }) {
+  return (
+    <Modal open={open} onOpenChange={onOpenChange} title={project ? `Edit ${project.name}` : 'New project'}>
+      {open && <ProjectForm key={project?.id ?? 'new'} project={project} onDone={() => onOpenChange(false)} />}
+    </Modal>
+  )
+}
+
+function ProjectForm({ project, onDone }: { project?: Project; onDone: () => void }) {
   const { data, updateCompany } = useDashboard()
   const { user } = useSession()
-  const [form, setForm] = useState({ name: '', registry: REGISTRIES[0], networkId: '' })
+  const [form, setForm] = useState({ name: project?.name ?? '', registry: project?.registry ?? REGISTRIES[0], networkIds: project?.networkIds ?? [] })
+  const registries = REGISTRIES.includes(form.registry) ? REGISTRIES : [form.registry, ...REGISTRIES]
+  const toggle = (id: string) => setForm((f) => ({ ...f, networkIds: f.networkIds.includes(id) ? f.networkIds.filter((x) => x !== id) : [...f.networkIds, id] }))
+
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title="New project">
-      <form
-        className="flex flex-col gap-4"
-        onSubmit={(e) => {
-          e.preventDefault()
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={(e) => {
+        e.preventDefault()
+        const name = form.name.trim()
+        if (project) {
+          updateCompany(
+            (c) => {
+              const x = c.projects.find((y) => y.id === project.id)
+              if (x) Object.assign(x, { name, registry: form.registry, networkIds: form.networkIds })
+            },
+            { by: user.name, change: `Project edited: ${name}` },
+          )
+          toast.success('Project saved')
+        } else {
           updateCompany(
             (c) =>
               void c.projects.unshift({
                 id: uid('pr-'),
-                name: form.name.trim(),
+                name,
                 registry: form.registry,
                 status: 'draft',
-                networkIds: form.networkId ? [form.networkId] : [],
+                networkIds: form.networkIds,
                 createdAt: new Date().toISOString(),
               }),
-            { by: user.name, change: `Project added: ${form.name.trim()}` },
+            { by: user.name, change: `Project added: ${name}` },
           )
           toast.success('Project added')
-          setForm({ name: '', registry: REGISTRIES[0], networkId: '' })
-          onOpenChange(false)
-        }}
-      >
-        <Field label="Project name">
-          <Input
-            required
-            autoFocus
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-        </Field>
-        <Field label="Registry">
-          <NativeSelect
-            value={form.registry}
-            onChange={(e) => setForm({ ...form, registry: e.target.value })}
-          >
-            {REGISTRIES.map((r) => (
-              <option key={r}>{r}</option>
-            ))}
-          </NativeSelect>
-        </Field>
-        <Field label="Network (optional)">
-          <NativeSelect
-            value={form.networkId}
-            onChange={(e) => setForm({ ...form, networkId: e.target.value })}
-          >
-            <option value="">— None yet —</option>
-            {data.networks.map((n) => (
-              <option key={n.id} value={n.id}>
-                {n.name}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-        <div className="flex justify-end gap-2 pt-1">
-          <Button onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="submit" variant="primary">
-            <Building2 /> Add project
-          </Button>
+        }
+        onDone()
+      }}
+    >
+      <Field label="Project name">
+        <Input required autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+      </Field>
+      <Field label="Registry">
+        <NativeSelect value={form.registry} onChange={(e) => setForm({ ...form, registry: e.target.value })}>
+          {registries.map((r) => (
+            <option key={r}>{r}</option>
+          ))}
+        </NativeSelect>
+      </Field>
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="mb-1.5 text-xs font-bold tracking-wide text-ink-muted uppercase">Networks</legend>
+        <div className="scroll-thin flex max-h-48 flex-col gap-1 overflow-y-auto rounded-xl border border-line p-2">
+          {data.networks.map((n) => (
+            <label key={n.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-muted">
+              <Checkbox checked={form.networkIds.includes(n.id)} onCheckedChange={() => toggle(n.id)} aria-label={n.name} />
+              {n.name}
+            </label>
+          ))}
         </div>
-      </form>
-    </Modal>
+      </fieldset>
+      <div className="flex justify-end gap-2 pt-1">
+        <Button onClick={onDone}>Cancel</Button>
+        <Button type="submit" variant="primary">
+          <Building2 /> {project ? 'Save project' : 'Add project'}
+        </Button>
+      </div>
+    </form>
   )
 }

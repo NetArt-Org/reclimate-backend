@@ -1,6 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
-import { adminOnly, num, raw, rel, uuidId } from './shared'
+import { adminOnly, num, raw, rel, uuidId, voidFields } from './shared'
 
 /** Biomass types and how their baseline methane is treated in the carbon calculation. */
 export const Feedstocks: CollectionConfig = {
@@ -23,6 +23,8 @@ export const Feedstocks: CollectionConfig = {
     num('carbonContent', { admin: { description: '% of dry biochar mass' } }),
     num('bulkDensity', { admin: { description: 'kg/m³ of biochar' } }),
     { name: 'volumeTracking', type: 'checkbox', defaultValue: false },
+    /** Switched off: no longer offered for new records; existing records keep it. */
+    { name: 'active', type: 'checkbox', defaultValue: true },
   ],
 }
 
@@ -73,6 +75,7 @@ export const Batches: CollectionConfig = {
     num('shortTermSinkT'),
     num('kilnVolumeL'),
     rel('samplingContainer', 'containers'),
+    ...voidFields,
     raw,
   ],
 }
@@ -105,6 +108,7 @@ export const BiomassCollections: CollectionConfig = {
     num('distanceKm'),
     num('emissions'),
     rel('biomassSource', 'biomass-sources'),
+    ...voidFields,
     raw,
   ],
 }
@@ -130,6 +134,7 @@ export const Mixings: CollectionConfig = {
     num('bagsAvailable'),
     { name: 'description', type: 'textarea' },
     num('rejectedBiocharL'),
+    ...voidFields,
     raw,
   ],
 }
@@ -153,6 +158,7 @@ export const Packagings: CollectionConfig = {
     num('bagsRemaining'),
     { name: 'description', type: 'textarea' },
     num('rejectedBiocharL'),
+    ...voidFields,
     raw,
   ],
 }
@@ -175,6 +181,7 @@ export const Inventories: CollectionConfig = {
     num('actualQuantity'),
     { name: 'packedAt', type: 'date', index: true },
     { name: 'status', type: 'text' },
+    ...voidFields,
     raw,
   ],
 }
@@ -205,6 +212,7 @@ export const Applications: CollectionConfig = {
     num('bags'),
     { name: 'open', type: 'checkbox', defaultValue: false },
     { name: 'fullySinked', type: 'checkbox', defaultValue: false },
+    ...voidFields,
     raw,
   ],
 }

@@ -9,6 +9,7 @@ import {
   Flame,
   ImageOff,
   Leaf,
+  List,
   Map as MapIcon,
   MapPin,
   Pencil,
@@ -29,8 +30,11 @@ import type { MapPoint } from '../home/MapView'
 import { cn, day, num } from '../lib/utils'
 import { unwrap } from '../lib/unwrap'
 import { getNetworkExtras, type BiomassSourceRow, type Dimensions, type NetworkExtras, type Photo, type VehicleRow } from '../server/networks-extra'
+import { HistoryButton } from '../components/HistoryPanel'
+import type { SiteListItem } from '../server/networks-extra'
 import { ROLE_TONE } from './PeopleTable'
 import { SourceSheet, VehicleSheet } from './AssetSheets'
+import { ContainerSheet, KilnSheet, LIST_TITLE, ListItemSheet, SiteSheet, type AnyContainer } from './SiteSheets'
 
 const MapView = dynamic(() => import('../home/MapView').then((m) => m.MapView), {
   ssr: false,
@@ -136,11 +140,21 @@ export function SiteAssets({ network: n, extras }: { network: Network; extras: E
 
   const tabs = [...sites.map((s) => ({ id: s.id, label: s.name, active: s.active })), ...(unassigned ? [{ id: NO_SITE, label: 'No site', active: true }] : [])]
   const [picked, setPicked] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
   const current = tabs.find((t) => t.id === picked)?.id ?? tabs[0]?.id
   const refs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const addSheet = <SiteSheet open={adding} onOpenChange={setAdding} network={n} site={null} onCreated={setPicked} />
 
   if (!tabs.length) {
-    return <EmptyState icon={<MapPin />} title="No sites yet" sub="Sites are created when the field team registers them in the app." />
+    return (
+      <div className="flex flex-col items-center gap-3">
+        <EmptyState icon={<MapPin />} title="No sites yet" sub="Add the network's first site; kilns, containers and people are then added to it." />
+        <Button variant="primary" onClick={() => setAdding(true)}>
+          <Plus /> Add site
+        </Button>
+        {addSheet}
+      </div>
+    )
   }
 
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -170,6 +184,8 @@ export function SiteAssets({ network: n, extras }: { network: Network; extras: E
         </div>
       )}
 
+      <div className="flex items-start gap-2">
+      <div className="min-w-0 flex-1">
       {tabs.length > 1 && (
         <div role="tablist" aria-label="Sites" onKeyDown={onKey} className="scroll-thin -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
           {tabs.map((t) => (
@@ -196,6 +212,12 @@ export function SiteAssets({ network: n, extras }: { network: Network; extras: E
           ))}
         </div>
       )}
+      </div>
+      <Button size="sm" variant="soft" className="shrink-0 rounded-lg" onClick={() => setAdding(true)}>
+        <Plus /> Add site
+      </Button>
+      </div>
+      {addSheet}
 
       <div role={tabs.length > 1 ? 'tabpanel' : undefined} id={`site-panel-${current}`} aria-labelledby={tabs.length > 1 ? `site-tab-${current}` : undefined}>
         <SitePanel key={current} network={n} site={site ?? null} siteIds={siteIds} extras={extras} />
@@ -214,6 +236,9 @@ function SitePanel({ network: n, site, siteIds, extras }: { network: Network; si
   const loading = extras.loading && !x
   const [vehicle, setVehicle] = useState<VehicleRow | 'new' | null>(null)
   const [source, setSource] = useState<BiomassSourceRow | 'new' | null>(null)
+  const [editSite, setEditSite] = useState(false)
+  const [kiln, setKiln] = useState<Kiln | 'new' | null>(null)
+  const [container, setContainer] = useState<{ kind: 'measuring' | 'sampling'; row: AnyContainer | null } | null>(null)
 
   const mine = (id: string | null) => (site ? id === site.id : !id || !siteIds.has(id))
   const kilns = site ? data.kilns.filter((k) => k.siteId === site.id) : []
@@ -246,26 +271,51 @@ function SitePanel({ network: n, site, siteIds, extras }: { network: Network; si
             {site.active ? 'Active' : 'Inactive'}
             <Switch checked={site.active} onCheckedChange={(active) => updateSite(site.id, { active })} aria-label={`${site.name} active`} />
           </label>
+          <Button size="sm" className="rounded-lg" onClick={() => setEditSite(true)}>
+            <Pencil /> Edit
+          </Button>
+          <HistoryButton entity="sites" entityId={site.id} title={site.name} />
         </div>
       ) : (
         <p className="text-sm text-ink-muted">Records linked to {n.name} but not to one of its sites.</p>
       )}
 
       {site && (n.type === 'artisan' || kilns.length > 0) && (
-        <Section icon={<Flame />} title="Kilns" count={kilns.length}>
+        <Section
+          icon={<Flame />}
+          title="Kilns"
+          count={kilns.length}
+          action={
+            <Button size="sm" variant="soft" className="rounded-lg" onClick={() => setKiln('new')}>
+              <Plus /> Add<span className="sr-only"> kiln</span>
+            </Button>
+          }
+        >
           {kilns.length ? (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {kilns.map((k) => (
-                <KilnCard key={k.id} kiln={k} extra={x?.kilns.find((e) => e.id === k.id)} loading={loading} />
+                <KilnCard key={k.id} kiln={k} extra={x?.kilns.find((e) => e.id === k.id)} loading={loading} onEdit={() => setKiln(k)} />
               ))}
             </div>
           ) : (
-            <EmptyState icon={<Flame />} title="No kilns" sub="Kilns are registered from the field app." />
+            <EmptyState icon={<Flame />} title="No kilns" sub="Add one here, or approve a kiln request from the field app." />
           )}
         </Section>
       )}
 
-      <Section icon={<Beaker />} title="Measuring containers" count={x ? measuring.length : undefined} defaultOpen={!!site}>
+      <Section
+        icon={<Beaker />}
+        title="Measuring containers"
+        count={x ? measuring.length : undefined}
+        defaultOpen={!!site}
+        action={
+          x && (
+            <Button size="sm" variant="soft" className="rounded-lg" onClick={() => setContainer({ kind: 'measuring', row: null })}>
+              <Plus /> Add<span className="sr-only"> measuring container</span>
+            </Button>
+          )
+        }
+      >
         {loading ? (
           <SkeletonRows />
         ) : (
@@ -277,13 +327,22 @@ function SitePanel({ network: n, site, siteIds, extras }: { network: Network; si
               { label: 'Shape', track: '110px', cell: (c) => shapeLabel(c.shape) || '—' },
               { label: 'Dimensions', track: 'minmax(0,1.2fr)', cell: (c) => <DimsText d={c.dimensions} /> },
               { label: 'Volume', track: '90px', align: 'right', cell: (c) => litres(c.volumeL) },
-              { label: 'Status', track: '90px', cell: (c) => <Badge tone={c.inUse ? 'success' : 'neutral'}>{c.inUse ? 'In use' : 'Idle'}</Badge> },
+              { label: 'Status', track: '90px', cell: (c) => (c.active ? <Badge tone={c.inUse ? 'success' : 'neutral'}>{c.inUse ? 'In use' : 'Idle'}</Badge> : <Badge tone="neutral">Retired</Badge>) },
+              {
+                label: '',
+                track: '40px',
+                cell: (c) => (
+                  <Button variant="ghost" size="icon-sm" aria-label={`Edit ${c.code || c.name}`} onClick={() => setContainer({ kind: 'measuring', row: { ...c, kind: 'measuring' } })}>
+                    <Pencil />
+                  </Button>
+                ),
+              },
             ]}
           />
         )}
       </Section>
 
-      <SamplingSection rows={sampling} loading={loading} loaded={!!x} />
+      <SamplingSection rows={sampling} loading={loading} loaded={!!x} onEdit={(row) => setContainer({ kind: 'sampling', row: row && { ...row, kind: 'sampling' } })} />
 
       <Section
         icon={<Truck />}
@@ -304,7 +363,7 @@ function SitePanel({ network: n, site, siteIds, extras }: { network: Network; si
             rows={vehicles}
             empty={<EmptyState icon={<Truck />} title="No vehicles" sub="Vehicles used to bring biomass to the site." />}
             columns={[
-              { label: 'Vehicle', track: 'minmax(0,1.3fr)', cell: (v) => <Thumbed photo={v.photo} title={v.name || v.plate} sub={v.name ? v.plate : ''} /> },
+              { label: 'Vehicle', track: 'minmax(0,1.3fr)', cell: (v) => <Thumbed photo={v.photo} title={v.name || v.plate} sub={[v.name ? v.plate : '', v.active ? '' : 'Not in use'].filter(Boolean).join(' · ')} /> },
               { label: 'Plate', track: '120px', cell: (v) => <span className="font-semibold">{v.plate}</span> },
               { label: 'Type', track: 'minmax(0,0.8fr)', cell: (v) => v.type || '—' },
               { label: 'Fuel', track: '90px', cell: (v) => v.fuel || '—' },
@@ -324,6 +383,8 @@ function SitePanel({ network: n, site, siteIds, extras }: { network: Network; si
       </Section>
 
       <SourcesSection site={site} rows={sources} loading={loading} loaded={!!x} onEdit={setSource} />
+
+      {site && x && <ListsSection network={n} site={site} rows={x.lists.filter((l) => l.siteId === site.id)} extras={extras} />}
 
       <Section icon={<Users />} title="Farmers & operators" count={x ? people.length : undefined}>
         {loading ? (
@@ -381,7 +442,71 @@ function SitePanel({ network: n, site, siteIds, extras }: { network: Network; si
         defaultSiteId={site?.id ?? null}
         onSaved={(row, isNew) => extras.patch((d) => ({ ...d, sources: isNew ? [...d.sources, row] : d.sources.map((b) => (b.id === row.id ? row : b)) }))}
       />
+      {site && <SiteSheet open={editSite} onOpenChange={setEditSite} network={n} site={site} />}
+      {site && <KilnSheet open={kiln !== null} onOpenChange={(o) => !o && setKiln(null)} network={n} siteId={site.id} kiln={kiln === 'new' ? null : kiln} />}
+      <ContainerSheet
+        open={container !== null}
+        onOpenChange={(o) => !o && setContainer(null)}
+        network={n}
+        kind={container?.kind ?? 'measuring'}
+        container={container?.row ?? null}
+        defaultSiteId={site?.id ?? null}
+        onSaved={extras.reload}
+      />
     </div>
+  )
+}
+
+/** The field app's pick lists for this site: packaging bags, preferred crops and buyers. */
+function ListsSection({ network, site, rows, extras }: { network: Network; site: Site; rows: SiteListItem[]; extras: ExtrasState }) {
+  const [edit, setEdit] = useState<{ category: SiteListItem['category']; item: SiteListItem | null } | null>(null)
+  return (
+    <Section icon={<List />} title="Field app lists" count={rows.length} defaultOpen={false}>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {(['bags', 'crops', 'buyers'] as const).map((cat) => {
+          const items = rows.filter((r) => r.category === cat)
+          return (
+            <div key={cat} className="rounded-lg border border-line">
+              <div className="flex items-center justify-between border-b border-line bg-muted px-3 py-2">
+                <span className="text-xs font-semibold text-ink-muted">{LIST_TITLE[cat]}</span>
+                <Button size="sm" variant="ghost" className="h-7 rounded-lg" onClick={() => setEdit({ category: cat, item: null })}>
+                  <Plus /> Add<span className="sr-only"> to {LIST_TITLE[cat]}</span>
+                </Button>
+              </div>
+              {items.length ? (
+                <ul className="divide-y divide-line">
+                  {items.map((it) => (
+                    <li key={it.id}>
+                      <button
+                        type="button"
+                        onClick={() => setEdit({ category: cat, item: it })}
+                        className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-brand/40"
+                      >
+                        <span className="min-w-0 flex-1 truncate font-medium">{it.name}</span>
+                        {it.detail && <span className="truncate text-xs text-ink-muted">{it.detail}</span>}
+                        <Pencil className="size-3.5 shrink-0 text-ink-subtle" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="px-3 py-3 text-xs text-ink-subtle">None yet.</p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <ListItemSheet
+        open={edit !== null}
+        onOpenChange={(o) => !o && setEdit(null)}
+        network={network}
+        siteId={site.id}
+        category={edit?.category ?? 'bags'}
+        item={edit?.item ?? null}
+        onSaved={(row, isNew) => extras.patch((d) => ({ ...d, lists: isNew ? [...d.lists, row] : d.lists.map((l) => (l.id === row.id ? row : l)) }))}
+        onDeleted={(id) => extras.patch((d) => ({ ...d, lists: d.lists.filter((l) => l.id !== id) }))}
+      />
+    </Section>
   )
 }
 
@@ -389,7 +514,7 @@ function SitePanel({ network: n, site, siteIds, extras }: { network: Network; si
 /* Sections                                                            */
 /* ------------------------------------------------------------------ */
 
-function SamplingSection({ rows, loading, loaded }: { rows: NetworkExtras['sampling']; loading: boolean; loaded: boolean }) {
+function SamplingSection({ rows, loading, loaded, onEdit }: { rows: NetworkExtras['sampling']; loading: boolean; loaded: boolean; onEdit: (row: NetworkExtras['sampling'][number] | null) => void }) {
   const [dueOnly, setDueOnly] = useState(false)
   const due = rows.filter((c) => c.due).length
   const shown = dueOnly ? rows.filter((c) => c.due) : rows
@@ -400,8 +525,9 @@ function SamplingSection({ rows, loading, loaded }: { rows: NetworkExtras['sampl
       count={loaded ? rows.length : undefined}
       warn={due}
       action={
-        loaded &&
-        rows.length > 0 && (
+        loaded && (
+          <div className="flex items-center gap-1.5">
+          {rows.length > 0 && (
           <button
             type="button"
             aria-pressed={dueOnly}
@@ -414,6 +540,11 @@ function SamplingSection({ rows, loading, loaded }: { rows: NetworkExtras['sampl
             <AlertTriangle className="size-3.5" /> Due only
             <span className="tabular-nums">({due})</span>
           </button>
+          )}
+          <Button size="sm" variant="soft" className="rounded-lg" onClick={() => onEdit(null)}>
+            <Plus /> Add<span className="sr-only"> sampling container</span>
+          </Button>
+          </div>
         )
       }
     >
@@ -451,6 +582,15 @@ function SamplingSection({ rows, loading, loaded }: { rows: NetworkExtras['sampl
                 ) : (
                   <span className="text-ink-muted">Due {day(c.dueAt)}</span>
                 ),
+            },
+            {
+              label: '',
+              track: '40px',
+              cell: (c) => (
+                <Button variant="ghost" size="icon-sm" aria-label={`Edit ${c.code || c.name}`} onClick={() => onEdit(c)}>
+                  <Pencil />
+                </Button>
+              ),
             },
           ]}
         />
@@ -711,7 +851,7 @@ function Thumbed({ photo, title, sub }: { photo: Photo | null; title: string; su
   )
 }
 
-function KilnCard({ kiln: k, extra, loading }: { kiln: Kiln; extra?: NetworkExtras['kilns'][number]; loading: boolean }) {
+function KilnCard({ kiln: k, extra, loading, onEdit }: { kiln: Kiln; extra?: NetworkExtras['kilns'][number]; loading: boolean; onEdit: () => void }) {
   const { updateKiln } = useDashboard()
   const dims = extra ? formatDims(extra.dimensions) : null
   const volumeL = extra?.volumeL ?? (k.volumeM3 != null ? Math.round(k.volumeM3 * 1000) : null)
@@ -730,6 +870,9 @@ function KilnCard({ kiln: k, extra, loading }: { kiln: Kiln; extra?: NetworkExtr
             aria-label={`${k.name} in service`}
             title={k.active ? 'In service — switch off to mark out of service' : 'Out of service — switch on to mark in service'}
           />
+          <Button variant="ghost" size="icon-sm" aria-label={`Edit ${k.name}`} onClick={onEdit}>
+            <Pencil />
+          </Button>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <Badge tone="artisan">{KILN_TYPE[k.type]}</Badge>

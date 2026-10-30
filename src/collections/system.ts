@@ -95,7 +95,13 @@ export const ActivityLogs: CollectionConfig = {
     { name: 'message', type: 'text', required: true },
     { name: 'network', type: 'relationship', relationTo: 'networks' },
     { name: 'by', type: 'text' },
+    { name: 'byEmail', type: 'text' },
     { name: 'actionType', type: 'text' },
+    /** The record the entry is about (collection slug + id), for its edit history. */
+    { name: 'entity', type: 'text', index: true },
+    { name: 'entityId', type: 'text', index: true },
+    /** What changed: [{ field, from, to }]. */
+    { name: 'changes', type: 'json' },
     /** When it happened (imported entries keep their original time). */
     { name: 'at', type: 'date', index: true },
   ],

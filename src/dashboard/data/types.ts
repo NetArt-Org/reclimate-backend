@@ -184,6 +184,7 @@ export interface Site {
   networkId: string
   name: string
   code?: string
+  address?: string
   lat: number | null
   lng: number | null
   active: boolean
@@ -198,6 +199,9 @@ export interface Kiln {
   code?: string
   type: 'kontiki' | 'pit'
   volumeM3?: number
+  /** conical, cylindrical, … and the size in mm (from a kiln template or measured). */
+  shape?: string
+  dimensions?: Record<string, number>
   lat: number | null
   lng: number | null
   active: boolean
@@ -284,6 +288,8 @@ export interface Feedstock {
   /** % */
   carbonContent: number | null
   volumeTracking: boolean
+  /** Switched off: not offered for new records. */
+  active: boolean
 }
 
 /** Where a batch's carbon stands, from field record to registry. */

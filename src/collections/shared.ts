@@ -22,3 +22,14 @@ export const latLng: Field[] = [num('lat'), num('lng')]
 
 /** The full source record from Circonomy, kept so no migrated detail is lost (secrets and ID documents stripped). */
 export const raw: Field = { name: 'raw', type: 'json', admin: { hidden: true } }
+
+/**
+ * Production records are never deleted from the admin panel: a mistaken one is voided (kept, with who, when and why),
+ * and left out of totals, credits and the field app. Restoring clears it again.
+ */
+export const voidFields: Field[] = [
+  { name: 'voided', type: 'checkbox', defaultValue: false, index: true },
+  { name: 'voidReason', type: 'text' },
+  { name: 'voidedBy', type: 'text' },
+  { name: 'voidedAt', type: 'date' },
+]

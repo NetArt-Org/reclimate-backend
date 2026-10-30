@@ -5,6 +5,7 @@ import * as migration_20261008_095722_field_app from './20261008_095722_field_ap
 import * as migration_20261012_050028_field_app_v2 from './20261012_050028_field_app_v2';
 import * as migration_20261012_120000_field_rate_limits from './20261012_120000_field_rate_limits';
 import * as migration_20261012_180000_field_idempotency from './20261012_180000_field_idempotency';
+import * as migration_20261026_143324_admin_history_void from './20261026_143324_admin_history_void';
 
 export const migrations = [
   {
@@ -30,7 +31,7 @@ export const migrations = [
   {
     up: migration_20261012_050028_field_app_v2.up,
     down: migration_20261012_050028_field_app_v2.down,
-    name: '20261012_050028_field_app_v2'
+    name: '20261012_050028_field_app_v2',
   },
   {
     up: migration_20261012_120000_field_rate_limits.up,
@@ -41,5 +42,10 @@ export const migrations = [
     up: migration_20261012_180000_field_idempotency.up,
     down: migration_20261012_180000_field_idempotency.down,
     name: '20261012_180000_field_idempotency',
+  },
+  {
+    up: migration_20261026_143324_admin_history_void.up,
+    down: migration_20261026_143324_admin_history_void.down,
+    name: '20261026_143324_admin_history_void'
   },
 ];

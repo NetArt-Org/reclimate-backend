@@ -1,8 +1,9 @@
 'use client'
 
-import { MapPin, Plus } from 'lucide-react'
+import { MapPin, Pencil, Plus } from 'lucide-react'
 import { useState } from 'react'
 
+import { HistoryButton } from '../components/HistoryPanel'
 import { Avatar, Badge, Button, Card, Switch } from '../components/ui'
 import { APPLICATION_TYPES, MIXING_TYPES } from '../data/catalog'
 import { useDashboard } from '../data/store'
@@ -23,6 +24,7 @@ export function PartnersTab() {
   const { data, updateOrg } = useDashboard()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
+  const [editingOrg, setEditingOrg] = useState(false)
   const org = data.orgs.find((o) => o.id === selectedId) ?? data.orgs[0]
 
   return (
@@ -81,6 +83,10 @@ export function PartnersTab() {
                 {data.networks.filter((n) => n.orgId === org.id).length} networks
               </div>
             </div>
+            <Button size="sm" className="rounded-lg" onClick={() => setEditingOrg(true)}>
+              <Pencil /> Edit
+            </Button>
+            <HistoryButton entity="organizations" entityId={org.id} title={org.name} />
             <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
               {org.active ? 'Active' : 'Inactive'}
               <Switch
@@ -112,6 +118,7 @@ export function PartnersTab() {
       )}
 
       <OrgDialog open={adding} onOpenChange={setAdding} />
+      {org && <OrgDialog open={editingOrg} onOpenChange={setEditingOrg} org={org} />}
     </div>
   )
 }
