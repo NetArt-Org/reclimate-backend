@@ -75,11 +75,12 @@
   }
 
   async function batches() {
-    const first = await get('/admin/new/process?limit=500&page=0&timezone=UTC')
+    // Since Oct 2026 the batch list needs the registry.
+    const first = await get(`/admin/new/process?limit=500&page=0&timezone=UTC&registryId=${REG}`)
     const total = first.body.count
     const list = [...first.body.kilnProcesses]
     for (let p = 1; list.length < total && p < 40; p++) {
-      const r = await get(`/admin/new/process?limit=500&page=${p}&timezone=UTC`)
+      const r = await get(`/admin/new/process?limit=500&page=${p}&timezone=UTC&registryId=${REG}`)
       if (!r.body?.kilnProcesses?.length) break
       list.push(...r.body.kilnProcesses)
     }
@@ -91,12 +92,12 @@
 
   async function other() {
     const jobs = {
-      biomassCollection: () => paged(`/admin/new/biomass-collection?search=&csinkManagerIds=${CM}`),
-      mixing: () => paged(`/admin/new/mixing-packaging?isMixing=true&csinkManagerIds=${CM}`),
-      packaging: () => paged(`/admin/new/mixing-packaging?isMixing=false&csinkManagerIds=${CM}`),
-      inventories: () => paged(`/admin/new/inventories?csinkManagerIds=${CM}`),
-      distributions: () => paged(`/admin/new/distribution-applications?csinkManagerIds=${CM}`),
-      mixingTracking: () => paged(`/admin/new/mixing-tracking?csinkManagerIds=${CM}`),
+      biomassCollection: () => paged(`/admin/new/biomass-collection?search=&csinkManagerIds=${CM}&registryId=${REG}`),
+      mixing: () => paged(`/admin/new/mixing-packaging?isMixing=true&csinkManagerIds=${CM}&registryId=${REG}`),
+      packaging: () => paged(`/admin/new/mixing-packaging?isMixing=false&csinkManagerIds=${CM}&registryId=${REG}`),
+      inventories: () => paged(`/admin/new/inventories?csinkManagerIds=${CM}&registryId=${REG}`),
+      distributions: () => paged(`/admin/new/distribution-applications?csinkManagerIds=${CM}&registryId=${REG}`),
+      mixingTracking: () => paged(`/admin/new/mixing-tracking?csinkManagerIds=${CM}&registryId=${REG}`),
       users: () => paged(`/admin/new/users/v2?search=&csinkManagerIds=${CM}`),
       entities: () => paged(`/admin/new/entities?csinkManagerIds=${CM}`),
       networks: () => one(`/admin/new/networks?csinkManagerIds=${CM}&includeSuspended=true`),
@@ -119,8 +120,9 @@
     for (const [k, f] of Object.entries(jobs)) {
       if (exp.stopped) break
       try {
-        exp.data.other[k] = await f()
-        exp.progress[k] = 'ok'
+        const r = (exp.data.other[k] = await f())
+        exp.progress[k] = r?.error ? `err ${r.error}` : 'ok'
+        if (r?.error) exp.errors.push(k + ': ' + JSON.stringify(r).slice(0, 150))
       } catch (e) {
         exp.progress[k] = 'err'
         exp.errors.push(k + ': ' + String(e).slice(0, 150))

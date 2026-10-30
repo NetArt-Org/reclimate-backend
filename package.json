@@ -17,6 +17,7 @@
     "migrate:create": "cross-env NODE_OPTIONS=--no-deprecation payload migrate:create",
     "import:circonomy": "cross-env NODE_OPTIONS=--no-deprecation payload run src/scripts/import-circonomy.ts",
     "media:copy": "cross-env NODE_OPTIONS=--no-deprecation payload run src/scripts/copy-media.ts",
+    "media:link": "cross-env NODE_OPTIONS=--no-deprecation payload run src/scripts/link-media.ts",
     "admin:create": "cross-env NODE_OPTIONS=--no-deprecation payload run src/scripts/create-admin.ts",
     "files:prune": "cross-env NODE_OPTIONS=--no-deprecation payload run src/scripts/prune-files.ts"
   },

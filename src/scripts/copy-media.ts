@@ -11,9 +11,19 @@
  * The download links come from the export (data/import/circonomy-export.json). They are signed links that
  * stop working about 6 days after the export, so run this soon after exporting — or export again.
  * Re-runnable: files already copied are skipped.
+ *
+ * Files are compressed on the way, without visible loss (checked on samples: photos SSIM 0.993):
+ *  - JPEG photos: re-encoded at quality 85 (mozjpeg), longest side at most 2048 px, metadata kept;
+ *  - videos: the picture is kept exactly as it is (re-encoding these phone videos softens them for little
+ *    gain); only the audio goes to AAC 96 kbps, and the file is made streamable (faststart). Needs ffmpeg.
+ * A compressed file is used only when it is clearly smaller (under 90 % of the original). MEDIA_RAW=1 turns this off.
  */
+import { execFile } from 'child_process'
 import fs from 'fs'
+import os from 'os'
 import path from 'path'
+import { promisify } from 'util'
+import sharp from 'sharp'
 import { sql } from '@payloadcms/db-postgres'
 import { getPayload } from 'payload'
 
@@ -36,6 +46,39 @@ function sourceLinks(): Map<string, string> {
   }
   walk(JSON.parse(fs.readFileSync(file, 'utf8')))
   return links
+}
+
+const exec = promisify(execFile)
+const FFMPEG = ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg'].find((p) => fs.existsSync(p)) ?? 'ffmpeg'
+
+async function compressVideo(body: Buffer, ext: string): Promise<Buffer> {
+  const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'media-'))
+  const src = path.join(dir, `in.${ext}`)
+  const out = path.join(dir, `out.${ext}`)
+  try {
+    await fs.promises.writeFile(src, body)
+    await exec(FFMPEG, ['-v', 'error', '-y', '-i', src, '-map', '0:v', '-map', '0:a?', '-map_metadata', '0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', out])
+    return await fs.promises.readFile(out)
+  } finally {
+    await fs.promises.rm(dir, { recursive: true, force: true })
+  }
+}
+
+/** The smaller of the original and its compressed version (compression problems keep the original). */
+async function compress(body: Buffer, type: string, name: string): Promise<Buffer> {
+  if (process.env.MEDIA_RAW) return body
+  const ext = (name.split('.').pop() || '').toLowerCase()
+  let out: Buffer | null = null
+  try {
+    if (type === 'image/jpeg') {
+      out = await sharp(body).rotate().resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true }).keepMetadata().jpeg({ quality: 85, mozjpeg: true }).toBuffer()
+    } else if (type.startsWith('video/') && /^(mp4|mov|m4v)$/.test(ext)) {
+      out = await compressVideo(body, ext)
+    }
+  } catch {
+    out = null
+  }
+  return out && out.length > 0 && out.length < body.length * 0.9 ? out : body
 }
 
 async function run() {
@@ -63,6 +106,7 @@ async function run() {
   let done = 0
   let failed = 0
   let bytes = 0
+  let sourceBytes = 0
   let i = 0
   const worker = async () => {
     while (i < rows.length && bytes < maxBytes) {
@@ -72,8 +116,10 @@ async function run() {
         if (!url) throw new Error('no download link in the export')
         const r = await fetch(url)
         if (!r.ok) throw new Error(`download ${r.status}${r.status === 403 ? ' (link expired — export again)' : ''}`)
-        const body = Buffer.from(await r.arrayBuffer())
+        const original = Buffer.from(await r.arrayBuffer())
         const type = r.headers.get('content-type') && r.headers.get('content-type') !== 'binary/octet-stream' ? r.headers.get('content-type')! : f.mime_type
+        const body = await compress(original, type, f.name)
+        sourceBytes += original.length
         // Same key layout as the source, grouped under circonomy/<category>/.
         const key = `circonomy/${f.category || 'other'}/${f.source_path.replace(/^s3:\/\/[^/]+\//, '')}`
         await store.file(key).save(body, { contentType: type, resumable: false, metadata: { cacheControl: 'private, max-age=31536000' } })
@@ -85,11 +131,11 @@ async function run() {
         await db.execute(sql`update files set status = 'failed', updated_at = now() where id = ${f.id}`)
         if (failed <= 10) console.warn(`✗ ${f.name}: ${err instanceof Error ? err.message : err}`)
       }
-      if ((done + failed) % 250 === 0) console.log(`  ${done + failed}/${rows.length} · ${(bytes / 1e9).toFixed(2)} GB`)
+      if ((done + failed) % 250 === 0) console.log(`  ${done + failed}/${rows.length} · ${(sourceBytes / 1e9).toFixed(2)} GB → ${(bytes / 1e9).toFixed(2)} GB stored · ${failed} failed`)
     }
   }
   await Promise.all(Array.from({ length: 8 }, worker))
-  console.log(`✓ copied ${done} files (${(bytes / 1e9).toFixed(2)} GB), ${failed} failed${bytes >= maxBytes ? ' — stopped at the size cap' : ''}`)
+  console.log(`✓ copied ${done} files (${(sourceBytes / 1e9).toFixed(2)} GB → ${(bytes / 1e9).toFixed(2)} GB), ${failed} failed${bytes >= maxBytes ? ' — stopped at the size cap' : ''}`)
   process.exit(0)
 }
 

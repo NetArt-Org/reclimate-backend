@@ -10,6 +10,7 @@
  * The older Excel exports (data/import/batches.json …) fill the few fields the API does not return:
  * sink/registry flags and the firing operator per batch, and the batch links of mixing/packaging rows.
  */
+import { createHash } from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import { sql } from '@payloadcms/db-postgres'
@@ -90,7 +91,10 @@ interface MediaRow {
 function collectMedia(o: any, owner: [string, string], out: Map<string, MediaRow>, category = 'other') {
   if (Array.isArray(o)) return o.forEach((x) => collectMedia(x, owner, out, category))
   if (!o || typeof o !== 'object') return
-  const p = typeof o.path === 'string' && o.path.startsWith('s3://') ? o.path : typeof o.fileName === 'string' && o.fileName.startsWith('s3://') ? o.fileName : null
+  const s3 = (v: unknown) => (typeof v === 'string' && v.startsWith('s3://') ? v : null)
+  // Some file objects keep the original file name in `path`; the storage key is then only in the signed `url`.
+  const key = typeof o.url === 'string' ? o.url.match(/^https:\/\/prod-circo\.s3[^/]*\/([^?]+)/)?.[1] : undefined
+  const p = s3(o.path) ?? s3(o.fileName) ?? (key ? `s3://prod-circo/${key}` : null)
   if (p && o.id && !out.has(String(o.id))) {
     const name = p.split('/').pop()!
     const ext = name.split('.').pop()!.toLowerCase()
@@ -111,6 +115,12 @@ function collectMedia(o: any, owner: [string, string], out: Map<string, MediaRow
       collectMedia(v, owner, out, cat)
     }
   }
+}
+
+/** A stable UUID for rows Circonomy has no id for (the same input always gives the same id, so re-runs update). */
+const uuidFrom = (s: string) => {
+  const h = createHash('sha1').update(s).digest('hex')
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${((parseInt(h[16], 16) & 3) | 8).toString(16)}${h.slice(17, 20)}-${h.slice(20, 32)}`
 }
 
 /* ---------------------------------------------------------------- run */
@@ -193,6 +203,7 @@ async function run() {
       raw: strip(b),
     })),
   )
+  for (const b of bas) collectMedia(b.managerDetails ?? [], ['organizations', b.id], media, 'training')
 
   /* ---------- networks ---------- */
   const entities: Obj[] = o.entities?.items ?? []
@@ -418,6 +429,31 @@ async function run() {
       })
       collectMedia(f, ['people', f.id], media, 'farmer')
     }
+    // Network managers and operators: Circonomy's users list leaves some of them out.
+    const d: Obj = nd.detail ?? {}
+    const staff: Obj[] = [
+      ...(d.managerDetails ?? []).map((m: Obj) => ({ ...m, id: m.managerId, name: m.managerName, number: m.managerPhone, email: m.managerEmail })),
+      ...(d.operatorDetails ?? []),
+    ]
+    for (const s of staff) {
+      if (!s.id) continue
+      if (!people.has(s.id)) {
+        people.set(s.id, {
+          id: s.id,
+          name: clean(s.name),
+          role: ROLES[s.accountType] ?? 'operator',
+          phone: s.number ? `${s.countryCode ?? ''} ${s.number}`.trim() : null,
+          email: s.email || null,
+          organization: entities.find((e) => e.id === netId)?.biomassAggregatorId ?? null,
+          networks: [netId],
+          sites: [],
+          active: true,
+          trainingDocs: [],
+          raw: strip(s),
+        })
+      }
+      collectMedia(s, ['people', s.id], media, 'training')
+    }
   }
   await upsertAll('people', [...people.values()])
 
@@ -443,6 +479,28 @@ async function run() {
     }
   })
   await upsertAll('feedstocks', feedRows)
+  for (const b of o.csinkManager?.assignedBiomass ?? []) {
+    const feed = feedRows.find((r) => r.name === clean(b.cropName))
+    collectMedia(b.imagePathUrl, feed ? ['feedstocks', feed.id] : ['company', 'feedstocks'], media, 'feedstock')
+  }
+
+  /* ---------- field app lists: the network's bags and preferred crops, on each of its sites ---------- */
+  const lists: Obj[] = []
+  for (const [netId, nd] of Object.entries<Obj>(details)) {
+    const dt: Obj = nd.detail?.details ?? {}
+    const items = [
+      ...(dt.bags ?? []).map((b: Obj) => ({ key: b.id, category: 'bags', name: clean(b.name), detail: [b.quantity, b.quantityUnit, b.bagType].filter(Boolean).join(' ') || null, src: b })),
+      ...(dt.preferredCrops ?? []).map((c: Obj) => ({ key: c.cropId, category: 'crops', name: clean(c.name), detail: null, src: c })),
+    ]
+    for (const s of sites.filter((x) => x.network === netId)) {
+      for (const it of items) {
+        const id = uuidFrom(`${it.category}:${it.key}:${s.id}`)
+        lists.push({ id, site: s.id, category: it.category, name: it.name, detail: it.detail })
+        collectMedia(it.src, ['site-lists', id], media, it.category === 'bags' ? 'bag' : 'crop')
+      }
+    }
+  }
+  await upsertAll('site-lists', lists)
 
   /* ---------- batches ---------- */
   const containerIds = new Set(containers.map((c) => c.id))
@@ -611,7 +669,7 @@ async function run() {
   await upsertAll(
     'stocks',
     stocks.map((s) => {
-      collectMedia(s, ['stocks', String(s.stockId)], media, 'certificate')
+      collectMedia(s, ['stocks', `stock-${s.stockId}`], media, 'certificate')
       return {
         id: `stock-${s.stockId}`,
         stockId: String(s.stockId),
@@ -636,7 +694,7 @@ async function run() {
   await upsertAll(
     'sinks',
     (o.sinks?.sinks ?? []).map((s: Obj) => {
-      collectMedia(s, ['sinks', String(s.id)], media, 'monitoring_report')
+      collectMedia(s, ['sinks', `sink-${s.id}`], media, 'monitoring_report')
       return {
         id: `sink-${s.id}`,
         sinkId: String(s.id),
@@ -742,6 +800,7 @@ async function run() {
   const [clat, clng] = coords(cm.location)
   const cert: Obj = o.certificateRequest ?? {}
   if (cm.companyLogo) collectMedia(cm.companyLogo, ['company', 'logo'], media, 'logo')
+  collectMedia(cm.methaneCompensateStrategies ?? [], ['company', 'methane'], media, 'methane_strategy')
   await payload.updateGlobal({
     slug: 'company',
     data: {
