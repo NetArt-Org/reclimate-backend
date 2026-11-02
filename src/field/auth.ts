@@ -52,6 +52,9 @@ export class FieldError extends Error {
 /** Managers and supervisors review batches; kiln operators and farmers record them. */
 export const roleOf = (r: Person['role']): FieldRole => (r === 'manager' || r === 'supervisor' ? 'sup' : 'worker')
 
+/** Staff roles: the people already in the system who get an app login without signing up (farmers are records). */
+export const STAFF_ROLES: Person['role'][] = ['operator', 'supervisor', 'manager']
+
 export const relId = (v: unknown): string | undefined => {
   if (v == null) return undefined
   if (typeof v === 'object') return String((v as { id: string | number }).id)

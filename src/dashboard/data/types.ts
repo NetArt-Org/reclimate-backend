@@ -264,7 +264,16 @@ export interface Alert {
   /** A kiln a field user asked to add to their site. */
   kilnRequest?: { kiln: string; volumeL: number | null; siteId: string; site?: string; by: string }
   /** For a self-registration from the field app. */
-  registration?: { name: string; email: string; phone: string; role: string; site: string; network: string }
+  registration?: {
+    name: string
+    email: string
+    phone: string
+    role: string
+    site: string
+    network: string
+    /** Someone already in the system with the same phone number and no app login: approve by linking the two. */
+    match?: { id: string; name: string; phone: string }
+  }
   /** For sell requests from the field app. */
   sell?: { person: string; creditsT: number; buyer?: string }
   status: 'open' | 'approved' | 'rejected' | 'dismissed'

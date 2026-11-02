@@ -11,6 +11,7 @@ import { outdatedUsers, scopedNetworks } from '../data/selectors'
 import { useDashboard } from '../data/store'
 import type { Alert } from '../data/types'
 import { cn, day } from '../lib/utils'
+import { linkRegistration } from '../server/app-logins'
 
 const ICON: Record<Alert['kind'], typeof Info> = {
   'bulk-density': Info,
@@ -23,8 +24,21 @@ const ICON: Record<Alert['kind'], typeof Info> = {
 
 /** Things that need someone's attention, and a log of what happened. */
 export function ActionCenter() {
-  const { data, filters, resolveAlert } = useDashboard()
+  const { data, filters, resolveAlert, reload } = useDashboard()
   const [tab, setTab] = useState<'alerts' | 'logs'>('alerts')
+  const [linking, setLinking] = useState<string | null>(null)
+
+  /** "Yes, this is me" from the field app: the sign-up's login moves onto the existing person (history kept). */
+  const link = async (a: Alert) => {
+    const match = a.registration?.match
+    if (!match || linking) return
+    setLinking(a.id)
+    const r = await linkRegistration(a.id.slice(4), match.id)
+    setLinking(null)
+    if (!r.ok) return toast.error(r.error)
+    toast.success(`Linked to ${r.data.name} — they can sign in to the app now`)
+    reload()
+  }
   const [showOutdated, setShowOutdated] = useState(false)
 
   const inScope = new Set(scopedNetworks(data, filters).map((n) => n.id))
@@ -93,6 +107,12 @@ export function ActionCenter() {
                           {a.registration.phone && ` · ${a.registration.phone}`}
                         </div>
                       )}
+                      {a.registration?.match && (
+                        <div className="mt-1.5 rounded-lg bg-info-soft px-2.5 py-1.5 text-xs text-ink-2">
+                          Same phone as <b>{a.registration.match.name}</b> ({a.registration.match.phone}), already in the system without an app
+                          login. Link them if this is the same person: the login moves onto that profile and its history is kept.
+                        </div>
+                      )}
                       {a.kilnRequest && (
                         <div className="mt-1 text-xs text-ink-2">
                           {a.kilnRequest.by} asks to add <b>{a.kilnRequest.kiln}</b>
@@ -116,6 +136,24 @@ export function ActionCenter() {
                             </Button>
                             <Button size="sm" onClick={() => resolveAlert(a.id, 'rejected')}>
                               Decline
+                            </Button>
+                          </>
+                        ) : a.registration?.match ? (
+                          <>
+                            <Button size="sm" variant="primary" disabled={linking === a.id} onClick={() => void link(a)}>
+                              Approve &amp; link
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                resolveAlert(a.id, 'approved')
+                                toast.success('Approved as a new person')
+                              }}
+                            >
+                              Approve as new
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => resolveAlert(a.id, 'rejected')}>
+                              Reject
                             </Button>
                           </>
                         ) : a.registration || a.kilnRequest ? (

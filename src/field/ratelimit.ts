@@ -30,6 +30,12 @@ export const LIMITS = {
   /** Register now, per account and per address. */
   register: { max: 5, window: 3600, shared: true },
   registerIp: { max: 30, window: 3600, shared: true },
+  /** "Account found — is this you?" lookups while signing up, per account and per address (no phone-number fishing). */
+  registerMatch: { max: 10, window: 3600, shared: true },
+  registerMatchIp: { max: 30, window: 3600, shared: true },
+  /** "Forgot password" (creates a missing login first), per address and per email. */
+  passwordReset: { max: 10, window: 3600, shared: true },
+  passwordResetEmail: { max: 3, window: 3600, shared: true },
   /** Admin panel sign-ins, per address (stops password/token guessing on /admin/session). */
   adminSignIn: { max: 20, window: 900, shared: true },
   /** Sell requests and account deletion. */

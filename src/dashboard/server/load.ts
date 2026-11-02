@@ -18,6 +18,9 @@ import type {
   Site,
   User,
 } from '../data/types'
+import { STAFF_ROLES } from '@/field/auth'
+import { phoneKey } from '@/lib/phone'
+
 import { withAppDefaults } from '../data/catalog'
 import { DASHBOARD_TAG, db, n, relId, relIds } from './payload'
 
@@ -85,6 +88,18 @@ async function readDashboardData(): Promise<DashboardData> {
     // People who signed up in the field app and wait for an admin.
     payload.find({ collection: 'people', where: { registrationStatus: { equals: 'pending' } }, depth: 1, overrideAccess: true, pagination: false, sort: '-createdAt', select: { name: true, email: true, phone: true, role: true, sites: true, networks: true, createdAt: true } }),
   ])
+
+  // A sign-up whose phone number belongs to exactly one person without an app login (migrated, or added by an admin).
+  const byPhone = new Map<string, { id: string; name: string; phone: string }[]>()
+  for (const p of people.docs) {
+    const key = phoneKey(p.phone)
+    if (!key || p.firebaseUid || p.registrationStatus === 'pending' || !p.active || !STAFF_ROLES.includes(p.role)) continue
+    byPhone.set(key, [...(byPhone.get(key) ?? []), { id: String(p.id), name: p.name, phone: p.phone ?? '' }])
+  }
+  const phoneMatch = (p: { phone?: string | null }) => {
+    const found = byPhone.get(phoneKey(p.phone))
+    return found?.length === 1 ? found[0] : undefined
+  }
 
   const last = new Map((lastBatch.rows as { kind: string; id: string; at: string }[]).map((r) => [`${r.kind}:${r.id}`, new Date(r.at).toISOString()]))
 
@@ -271,7 +286,7 @@ async function readDashboardData(): Promise<DashboardData> {
           message: `${p.name} signed up for the field app`,
           date: p.createdAt,
           networkId: net?.id ? String(net.id) : undefined,
-          registration: { name: p.name, email: p.email ?? '', phone: p.phone ?? '', role: p.role, site: site?.name ?? '', network: net?.name ?? '' },
+          registration: { name: p.name, email: p.email ?? '', phone: p.phone ?? '', role: p.role, site: site?.name ?? '', network: net?.name ?? '', match: phoneMatch(p) },
           status: 'open',
         }
       }),

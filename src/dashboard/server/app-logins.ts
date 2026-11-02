@@ -1,5 +1,6 @@
 'use server'
 
+import { forgetPerson } from '@/field/auth'
 import { firebaseAuth, isFirebaseConfigured } from '@/lib/firebase/admin'
 import { invalidateDashboard, requireAdmin } from './payload'
 import { guard, UserError } from './result'
@@ -95,5 +96,47 @@ export async function setAppAccess(personId: string, enabled: boolean) {
     await payload.update({ collection: 'people', id: personId, data: { appAccess: enabled }, overrideAccess: true })
     await log(payload, user.name, `App access ${enabled ? 'switched on' : 'switched off'} for ${person.name}`)
     invalidateDashboard()
+  })()
+}
+
+/**
+ * A field-app sign-up from someone who is already in the system (migrated, or added by an admin without a login):
+ * their login moves onto the existing person, who gets app access and keeps their history; the sign-up record is
+ * removed, so they are not in the list twice.
+ */
+export async function linkRegistration(registrationId: string, personId: string) {
+  return guard(async () => {
+    const { payload, user } = await setup()
+    const reg = await payload.findByID({ collection: 'people', id: registrationId, depth: 0, overrideAccess: true }).catch(() => null)
+    if (!reg || reg.registrationStatus !== 'pending' || !reg.firebaseUid) throw new UserError('This sign-up is no longer waiting for approval.')
+    const person = await payload.findByID({ collection: 'people', id: personId, depth: 0, overrideAccess: true }).catch(() => null)
+    if (!person || String(person.id) === String(reg.id)) throw new UserError('Choose the person this sign-up belongs to.')
+    if (person.firebaseUid) throw new UserError(`${person.name} already has an app login.`)
+
+    const uid = reg.firebaseUid
+    const email = person.email?.trim() || reg.email || null
+    // The sign-up row goes first: it holds the login and (usually) the same email.
+    await payload.delete({ collection: 'people', id: reg.id, overrideAccess: true })
+    await payload.update({
+      collection: 'people',
+      id: person.id,
+      data: {
+        firebaseUid: uid,
+        appAccess: true,
+        active: true,
+        mustChangePassword: false,
+        registrationStatus: 'approved',
+        registrationNote: null,
+        email,
+        phone: person.phone || reg.phone || '',
+        ...(!(person.sites as unknown[] | undefined)?.length && reg.sites ? { sites: reg.sites } : {}),
+        ...(!(person.networks as unknown[] | undefined)?.length && reg.networks ? { networks: reg.networks } : {}),
+      } as never,
+      overrideAccess: true,
+    })
+    forgetPerson(uid)
+    await log(payload, user.name, `Field app sign-up of ${reg.name} linked to ${person.name} — app access on`)
+    invalidateDashboard()
+    return { name: person.name }
   })()
 }

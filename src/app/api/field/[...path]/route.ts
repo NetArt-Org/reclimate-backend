@@ -4,12 +4,12 @@ import config from '@payload-config'
 import { getPayload } from 'payload'
 
 import { DASHBOARD_TAG } from '@/dashboard/server/payload'
-import { deleteAccount, getFile, passwordChanged, register, registerOptions, registerStatus, saveProfile, uploadFile } from '@/field/account'
+import { deleteAccount, getFile, passwordChanged, prepareReset, register, registerMatch, registerOptions, registerStatus, saveProfile, uploadFile } from '@/field/account'
 import { authenticate, FieldError, tokenFrom, verifyToken, type FieldContext } from '@/field/auth'
 import { batchPage, isBatchFilter, reviewBatch, saveBatch } from '@/field/batches'
 import { bootstrap } from '@/field/bootstrap'
 import { bust } from '@/field/cache'
-import { limitParam, pageParam } from '@/field/common'
+import { limitParam, pageParam, text } from '@/field/common'
 import { checkSize, cors, errorReply, MAX_UPLOAD_REQUEST, readJson, reply } from '@/field/http'
 import { addSetupItem, createSellRequest, isSetupKey, loadCredits, removeSetupItem, setupPage, supervisorPage } from '@/field/lists'
 import { checkAppCheck } from '@/field/appcheck'
@@ -31,6 +31,8 @@ import { once } from '@/field/idempotency'
  *   GET    register/options          networks and sites to sign up for        (signed in, no person needed)
  *   GET    register/status           where a sign-up stands                   (signed in, no person needed)
  *   POST   register                  sign up (verified email); an admin approves
+ *   POST   register/match            "account found — is this you?" by phone (masked name and site only)
+ *   POST   password-reset            before "Forgot password": creates a missing login for staff already in the system (no sign-in)
  *   GET    me                        start-up data for the site: profile, rules, lists, first pages, stats
  *   GET    stats                     the site summary
  *   GET    page/<list>?page=N        next page: batches (?filter=waiting|ongoing|completed|reviewed), history,
@@ -85,6 +87,14 @@ async function route(req: Request, path: string[], url: URL): Promise<unknown | 
   const size = limitParam(url.searchParams.get('limit'))
   const payload = await getPayload({ config })
 
+  // "Forgot password" happens before any sign-in.
+  if (a === 'password-reset' && m === 'POST' && !b) {
+    const body = await req.clone().json().catch(() => null)
+    await limit(payload, 'passwordReset', clientIp(req))
+    await limit(payload, 'passwordResetEmail', text(body?.email, 200).toLowerCase() || '-')
+    return prepareReset(req)
+  }
+
   // Sign-up: a Firebase account without a person yet.
   if (a === 'register') {
     const t = await verifyToken(req)
@@ -95,6 +105,11 @@ async function route(req: Request, path: string[], url: URL): Promise<unknown | 
       await limit(payload, 'register', t.uid)
       await limit(payload, 'registerIp', clientIp(req))
       return register(req)
+    }
+    if (m === 'POST' && b === 'match') {
+      await limit(payload, 'registerMatch', t.uid)
+      await limit(payload, 'registerMatchIp', clientIp(req))
+      return registerMatch(req)
     }
     throw new FieldError(404, 'Not found.')
   }

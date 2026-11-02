@@ -1,12 +1,15 @@
 import 'server-only'
 
+import { randomBytes } from 'crypto'
+
 import config from '@payload-config'
 import { getPayload } from 'payload'
 
 import { storeUpload } from '@/dashboard/server/storage'
 import { serveFile } from '@/lib/files/serve'
+import { maskName, phoneKey } from '@/lib/phone'
 import type { File as FileRow, Person } from '@/payload-types'
-import { FieldError, forgetPerson, personFor, relId, relIds, verifyToken, type FieldContext, type VerifiedToken } from './auth'
+import { FieldError, forgetPerson, personFor, relId, relIds, STAFF_ROLES, verifyToken, type FieldContext, type VerifiedToken } from './auth'
 import { all, text, UPLOAD_LIMITS } from './common'
 import { media } from './map'
 
@@ -211,6 +214,79 @@ export async function registrationOf(t: VerifiedToken) {
 }
 
 /**
+ * The one person already in the system with this phone number and no app login yet (migrated from Circonomy, or
+ * added by an admin). Several matches count as none: an admin sorts those out.
+ */
+async function existingByPhone(payload: Awaited<ReturnType<typeof getPayload>>, phone: string) {
+  const key = phoneKey(phone)
+  if (!key) return null
+  const found = await payload.find({
+    collection: 'people',
+    // Numbers are stored with spaces and dashes, so they are compared in code (a few hundred people at most).
+    where: { and: [{ phone: { exists: true } }, { firebaseUid: { exists: false } }, { active: { equals: true } }, { role: { in: STAFF_ROLES } }] },
+    ...all,
+    pagination: false,
+    select: { name: true, phone: true, role: true, sites: true, networks: true, organization: true, registrationStatus: true },
+  })
+  const matches = found.docs.filter((p) => phoneKey(p.phone) === key && p.registrationStatus !== 'pending')
+  return matches.length === 1 ? matches[0] : null
+}
+
+/**
+ * POST register/match — "Account found: R***** K**** · Site. Is this you?" while signing up. Only for a signed-in,
+ * verified account, rate-limited, and it shows a masked name and the site only: enough for the person to recognise
+ * themselves, not enough to look people up. Saying "yes" still needs an admin's approval.
+ */
+export async function registerMatch(req: Request) {
+  const t = await verifyToken(req)
+  if (!t.emailVerified) throw new FieldError(403, 'Please verify your email first: open the link we sent you.', 'email_unverified')
+  const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
+  const payload = await getPayload({ config })
+  const match = await existingByPhone(payload, text(body?.phone, 40))
+  if (!match) return { found: false }
+  const siteId = relIds(match.sites)[0]
+  const site = siteId ? await payload.findByID({ collection: 'sites', id: siteId, ...all, select: { name: true } }).catch(() => null) : null
+  return { found: true, name: maskName(match.name), site: site?.name ?? '' }
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/**
+ * POST password-reset — called by the app just before it asks Firebase for the "choose your password" email.
+ * Staff already in the system with app access (migrated from Circonomy) may have no Firebase login yet, and Firebase
+ * only emails existing logins: this creates it, with a random password nobody knows. The email then lets the person
+ * choose their own, and their first sign-in links the login to them (personFor). No email is sent from here, and the
+ * answer is the same for every address, so nothing can be learnt from it.
+ */
+export async function prepareReset(req: Request) {
+  const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
+  const email = text(body?.email, 200).toLowerCase()
+  if (!EMAIL.test(email)) return { ok: true }
+  const payload = await getPayload({ config })
+  const found = (
+    await payload.find({
+      collection: 'people',
+      where: { email: { like: email } },
+      ...all,
+      limit: 5,
+      select: { name: true, email: true, role: true, active: true, appAccess: true, firebaseUid: true, registrationStatus: true },
+    })
+  ).docs.filter((p) => p.email?.trim().toLowerCase() === email)
+  const p = found.length === 1 ? found[0] : null
+  if (!p || p.firebaseUid || !p.active || !p.appAccess || p.registrationStatus === 'pending' || !STAFF_ROLES.includes(p.role)) return { ok: true }
+  // An admin-panel email keeps its own login.
+  if ((await payload.count({ collection: 'users', where: { email: { equals: email } }, overrideAccess: true })).totalDocs) return { ok: true }
+
+  const { firebaseAuth, isFirebaseConfigured } = await import('@/lib/firebase/admin')
+  if (!isFirebaseConfigured()) return { ok: true }
+  const auth = firebaseAuth()
+  if (!(await auth.getUserByEmail(email).catch(() => null))) {
+    await auth.createUser({ email, password: randomBytes(24).toString('base64url') + 'a1', emailVerified: true, displayName: p.name }).catch(() => {})
+  }
+  return { ok: true }
+}
+
+/**
  * POST register — sign up after creating the Firebase account in the app. Creates the person without app access;
  * an admin approves (or rejects) the request in the Action Center.
  */
@@ -227,16 +303,20 @@ export async function registerAccount(t: VerifiedToken, body: Record<string, unk
   const name = text(body.name, 100)
   const phone = text(body.phone, 40)
   const village = text(body.village, 200)
-  const role = ROLES.find((r) => r.value === body.role)?.value
   if (!name) throw new FieldError(400, 'Please enter your name.')
   if (phone.replace(/\D/g, '').length < 8) throw new FieldError(400, 'Please enter your phone number.')
-  if (!role) throw new FieldError(400, 'Please choose your role.')
-
   const payload = await getPayload({ config })
-  const site = typeof body.siteId === 'string' ? await payload.findByID({ collection: 'sites', id: body.siteId, ...all, select: { network: true, name: true, active: true } }).catch(() => null) : null
-  if (!site || site.active === false) throw new FieldError(400, 'Please choose your site.')
-  const network = relId(site.network)!
-  const net = await payload.findByID({ collection: 'networks', id: network, ...all, select: { organization: true, name: true } })
+  // "Yes, this is me": the existing person's role and site; the admin links the two when approving.
+  const claimed = body.claim === true ? await existingByPhone(payload, phone) : null
+  const role = ROLES.find((r) => r.value === body.role)?.value ?? claimed?.role
+  if (!role) throw new FieldError(400, 'Please choose your role.')
+  const siteId = typeof body.siteId === 'string' && body.siteId ? body.siteId : claimed ? relIds(claimed.sites)[0] : undefined
+
+  const site = siteId ? await payload.findByID({ collection: 'sites', id: siteId, ...all, select: { network: true, name: true, active: true } }).catch(() => null) : null
+  // A claimed account may have no site on record (some migrated people): its network, or none, is enough there.
+  if ((!site || site.active === false) && !claimed) throw new FieldError(400, 'Please choose your site.')
+  const network = (site && site.active !== false ? relId(site.network) : undefined) ?? (claimed ? relIds(claimed.networks)[0] : undefined)
+  const net = network ? await payload.findByID({ collection: 'networks', id: network, ...all, select: { organization: true, name: true } }).catch(() => null) : null
 
   const existing = await personFor(payload, t)
   if (existing && existing.registrationStatus !== 'rejected' && existing.registrationStatus !== 'pending') {
@@ -254,9 +334,9 @@ export async function registerAccount(t: VerifiedToken, body: Record<string, unk
     email: t.email,
     phone,
     address: village || null,
-    sites: [site.id],
-    networks: [network],
-    organization: relId(net.organization) ?? null,
+    sites: site && site.active !== false ? [site.id] : [],
+    networks: network ? [network] : [],
+    organization: (net ? relId(net.organization) : null) ?? (claimed ? relId(claimed.organization) : null) ?? null,
     active: true,
     appAccess: false,
     firebaseUid: t.uid,
@@ -269,7 +349,15 @@ export async function registerAccount(t: VerifiedToken, body: Record<string, unk
   forgetPerson(t.uid)
   await payload.create({
     collection: 'activity-logs',
-    data: { message: `${name} registered in the field app as ${role} at ${site.name} (${net.name}) — waiting for approval`, network, by: name, actionType: 'registration', at: new Date().toISOString() },
+    data: {
+      message: claimed
+        ? `${name} registered in the field app as ${claimed.name} (same phone number) — waiting for approval`
+        : `${name} registered in the field app as ${role} at ${site?.name} (${net?.name}) — waiting for approval`,
+      network,
+      by: name,
+      actionType: 'registration',
+      at: new Date().toISOString(),
+    },
     ...all,
   } as never)
   return { ok: true, id: person.id, status: 'pending' }
