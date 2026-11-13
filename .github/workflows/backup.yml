@@ -1,0 +1,132 @@
+# Daily backup of the production database (Neon Postgres) to a separate Google Cloud Storage bucket.
+#
+# Each run:
+#   1. dumps the whole database with pg_dump (custom format, compressed), using the same Postgres major version as Neon;
+#   2. proves the dump is good by restoring it into a throwaway Postgres and comparing tables and migrations;
+#   3. uploads it to gs://$BACKUP_BUCKET/daily/… (and on the 1st of the month also to monthly/…).
+# How long copies are kept, and how to restore one, is in docs/backups.md.
+#
+# Setup (once), as described in docs/backups.md:
+#   secret   BACKUP_DATABASE_URL   Neon connection string for a read-only role, on the direct (non "-pooler") host
+#   secret   GCP_BACKUP_SA_KEY     JSON key of a service account that may only create objects in the backup bucket
+#   variable BACKUP_BUCKET         bucket name without gs://, e.g. reclimate-db-backups
+# A failed run emails the repository's admins (GitHub's default for scheduled workflows).
+name: Database backup
+
+on:
+  schedule:
+    - cron: '30 19 * * *' # 19:30 UTC = 03:30 in Kuala Lumpur and 02:30 in Jakarta: the quietest time for field work
+  workflow_dispatch:
+
+concurrency:
+  group: database-backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: Dump, verify, upload
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: Production
+
+    env:
+      SOURCE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      BUCKET: ${{ vars.BACKUP_BUCKET }}
+
+    steps:
+      - name: Check settings
+        run: |
+          missing=""
+          [ -n "$SOURCE_URL" ] || missing="$missing secret BACKUP_DATABASE_URL,"
+          [ -n "$BUCKET" ] || missing="$missing variable BACKUP_BUCKET,"
+          [ -n "${{ secrets.GCP_BACKUP_SA_KEY != '' && 'x' || '' }}" ] || missing="$missing secret GCP_BACKUP_SA_KEY,"
+          if [ -n "$missing" ]; then echo "::error::Missing in the Production environment:${missing%,} (see docs/backups.md)"; exit 1; fi
+
+      # pg_dump must be at least the server's version, so use the Postgres image matching Neon's major version.
+      - name: Find the database's Postgres version
+        id: pg
+        run: |
+          major=$(docker run --rm -e SOURCE_URL postgres:17 sh -c 'psql "$SOURCE_URL" -XAtc "show server_version_num"' | cut -c1-2)
+          case "$major" in 1[4-9]) ;; *) echo "::error::Could not read the server version"; exit 1;; esac
+          echo "major=$major" >> "$GITHUB_OUTPUT"
+          echo "Neon runs Postgres $major"
+          # Neon's Free plan allows 5 GB of transfer a month, and each daily dump reads the whole database out.
+          mb=$(docker run --rm -e SOURCE_URL postgres:17 sh -c 'psql "$SOURCE_URL" -XAtc "select pg_database_size(current_database())/1048576"')
+          echo "Database size: ${mb} MB"
+          echo "Database size: **${mb} MB**" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$mb" -gt 120 ]; then
+            echo "::warning::The database is ${mb} MB. On Neon's Free plan (5 GB transfer and 0.5 GB storage a month), plan an upgrade or switch this backup to weekly. See docs/backups.md."
+          fi
+
+      - name: Dump the database
+        id: dump
+        env:
+          IMAGE: postgres:${{ steps.pg.outputs.major }}
+        run: |
+          mkdir -p out
+          name="reclimate-$(date -u +%Y-%m-%dT%H%MZ).dump"
+          docker run --rm -e SOURCE_URL -v "$PWD/out:/out" "$IMAGE" \
+            pg_dump "$SOURCE_URL" --format=custom --compress=9 --no-owner --no-privileges --file="/out/$name"
+          size=$(stat -c %s "out/$name")
+          [ "$size" -gt 10240 ] || { echo "::error::Dump is only $size bytes"; exit 1; }
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "Dump $name: $(numfmt --to=iec "$size")"
+
+      # A backup is only worth something if it restores: load it into a throwaway Postgres and compare with the source.
+      - name: Verify by restoring
+        env:
+          IMAGE: postgres:${{ steps.pg.outputs.major }}
+          NAME: ${{ steps.dump.outputs.name }}
+        run: |
+          docker run -d --name restore -e POSTGRES_PASSWORD=verify -v "$PWD/out:/out" "$IMAGE" >/dev/null
+          until docker exec restore pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
+          sleep 2
+          # Only the app's schema: Neon's own extras (roles, its internal schemas) don't exist in a plain Postgres.
+          docker exec restore pg_restore -U postgres -d postgres --schema=public --no-owner --no-privileges --exit-on-error "/out/$NAME"
+          q="select (select count(*) from information_schema.tables where table_schema='public') || ' tables, '
+                 || (select count(*) from payload_migrations) || ' migrations'"
+          src=$(docker run --rm -e SOURCE_URL "$IMAGE" psql "$SOURCE_URL" -XAtc "$q")
+          dst=$(docker exec restore psql -U postgres -XAtc "$q")
+          echo "Source:   $src"; echo "Restored: $dst"
+          [ "$src" = "$dst" ] || { echo "::error::Restored copy differs from the source"; exit 1; }
+          docker exec restore psql -U postgres -XAtc "analyze" >/dev/null
+          echo "Largest tables in the restored copy:"
+          docker exec restore psql -U postgres -XAtc \
+            "select relname || ': ' || n_live_tup from pg_stat_user_tables order by n_live_tup desc limit 8"
+          docker rm -f restore >/dev/null
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_BACKUP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # The service account may only create objects (no read, list, overwrite or delete), so a leaked key can neither
+      # read the backups nor destroy them. `gcloud storage cp` needs read access to check the target first, so upload
+      # with the JSON API directly; ifGenerationMatch=0 refuses to overwrite an existing object.
+      - name: Upload
+        env:
+          NAME: ${{ steps.dump.outputs.name }}
+        run: |
+          token=$(gcloud auth print-access-token)
+          echo "::add-mask::$token"
+          put() {
+            object=$(printf '%s' "$1" | sed 's#/#%2F#g')
+            curl -sS --fail-with-body --retry 3 --retry-all-errors -o /dev/null -X POST \
+              -H "Authorization: Bearer $token" -H "Content-Type: application/octet-stream" \
+              --data-binary "@out/$NAME" \
+              "https://storage.googleapis.com/upload/storage/v1/b/$BUCKET/o?uploadType=media&ifGenerationMatch=0&name=$object"
+          }
+          day=$(date -u +%Y/%m/%d)
+          put "daily/$day/$NAME"
+          if [ "$(date -u +%d)" = "01" ]; then
+            put "monthly/$(date -u +%Y/%m)/$NAME"
+          fi
+          echo "### Backup saved: \`gs://$BUCKET/daily/$day/$NAME\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the local copy
+        if: always()
+        run: rm -rf out
