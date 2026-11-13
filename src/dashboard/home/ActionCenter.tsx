@@ -11,6 +11,7 @@ import { outdatedUsers, scopedNetworks } from '../data/selectors'
 import { useDashboard } from '../data/store'
 import type { Alert } from '../data/types'
 import { cn, day } from '../lib/utils'
+import { formatDims, human } from '../networks/SiteAssets'
 import { linkRegistration } from '../server/app-logins'
 
 const ICON: Record<Alert['kind'], typeof Info> = {
@@ -46,7 +47,10 @@ export function ActionCenter() {
   const alerts = data.alerts.filter((a) => a.status === 'open' && visible(a.networkId))
   const logs = data.logs.filter((l) => visible(l.networkId))
   const outdated = outdatedUsers(data).filter((u) => u.networkIds.some((id) => inScope.has(id)))
-  const alertCount = alerts.length + (outdated.length ? 1 : 0)
+  // Bulk-density reports (every 100 m³) and yearly lab analyses that are due, at the networks in scope.
+  const labDue = (data.labDue ?? []).filter((x) => inScope.has(x.networkId))
+  const labCount = labDue.reduce((a, x) => a + (x.bulkDensityDue ? 1 : 0) + (x.analysisDue ? 1 : 0), 0)
+  const alertCount = alerts.length + (outdated.length ? 1 : 0) + (labCount ? 1 : 0)
 
   return (
     <Card id="attention" className="flex max-h-[430px] scroll-mt-24 flex-col p-3 sm:p-4">
@@ -84,6 +88,23 @@ export function ActionCenter() {
                 </div>
               </button>
             )}
+            {labCount > 0 && (
+              <Link href="/admin/settings" className="flex gap-3 rounded-xl border border-line p-3.5 text-left transition-colors hover:bg-muted">
+                <span className="mt-0.5 flex size-7 flex-none items-center justify-center rounded-lg bg-warn-soft text-warn">
+                  <FlaskConical className="size-4" />
+                </span>
+                <div>
+                  <div className="text-sm font-semibold">
+                    {labCount} lab {labCount === 1 ? 'report is' : 'reports are'} due
+                  </div>
+                  <div className="mt-0.5 text-xs text-ink-2">
+                    {[...new Set(labDue.map((x) => x.feedstock))].slice(0, 3).join(', ')}
+                    {new Set(labDue.map((x) => x.feedstock)).size > 3 ? '…' : ''} · bulk density every 100 m³, analysis yearly
+                  </div>
+                  <div className="mt-1 text-xs font-semibold text-info">Settings → Feedstock management →</div>
+                </div>
+              </Link>
+            )}
             {alerts.map((a) => {
               const Icon = ICON[a.kind]
               const warn = a.kind !== 'bulk-density' && a.kind !== 'sell-request' && a.kind !== 'registration' && !a.kilnRequest
@@ -117,6 +138,18 @@ export function ActionCenter() {
                         <div className="mt-1 text-xs text-ink-2">
                           {a.kilnRequest.by} asks to add <b>{a.kilnRequest.kiln}</b>
                           {a.kilnRequest.volumeL ? ` (${a.kilnRequest.volumeL} L)` : ''} at {a.kilnRequest.site}
+                          {a.kilnRequest.shape && (
+                            <div className="mt-1 text-ink-muted">
+                              {a.kilnRequest.kilnType === 'pit' ? 'Pit' : 'Kon-Tiki'} · {human(a.kilnRequest.shape)}
+                              {a.kilnRequest.dimensions && ` · ${formatDims(a.kilnRequest.dimensions).long}`}
+                            </div>
+                          )}
+                          {a.kilnRequest.photoIds?.[0] && (
+                            <a href={`/admin/files/${a.kilnRequest.photoIds[0]}`} target="_blank" rel="noreferrer" className="mt-1.5 block w-fit">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={`/admin/files/${a.kilnRequest.photoIds[0]}`} alt={`Measuring photo of ${a.kilnRequest.kiln}`} className="h-20 rounded-lg border border-line object-cover" />
+                            </a>
+                          )}
                         </div>
                       )}
                       <div className="mt-1 text-xs text-ink-muted">{day(a.date)}</div>

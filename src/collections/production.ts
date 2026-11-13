@@ -28,6 +28,52 @@ export const Feedstocks: CollectionConfig = {
   ],
 }
 
+/**
+ * Lab reports for a feedstock at one network (Settings → Feedstock management). Two kinds:
+ *  - bulk density: a new one is due every 100 m³ of biochar the network makes from the feedstock;
+ *  - analysis: carbon, organic carbon, hydrogen, H/C ratio, ash, pH, water holding capacity…, due once a year.
+ * Uploading one also sets the network's lab reference for the feedstock (what credits are estimated from).
+ */
+export const LabReports: CollectionConfig = {
+  slug: 'lab-reports',
+  access: adminOnly,
+  defaultSort: '-reportDate',
+  fields: [
+    uuidId,
+    rel('feedstock', 'feedstocks', { required: true }),
+    rel('network', 'networks', { required: true }),
+    {
+      name: 'kind',
+      type: 'select',
+      required: true,
+      index: true,
+      options: [
+        { label: 'Bulk density', value: 'bulk-density' },
+        { label: 'Lab analysis', value: 'analysis' },
+      ],
+    },
+    { name: 'reportDate', type: 'date', required: true },
+    rel('file', 'files'),
+    num('bulkDensity', { admin: { description: 'kg/m³' } }),
+    /** Analysis values, in % unless noted. */
+    num('carbonTotal'),
+    num('carbonOrganic'),
+    num('carbonInorganic'),
+    num('hydrogen'),
+    num('hcRatio'),
+    num('ash'),
+    num('ph'),
+    num('waterHoldingCapacity'),
+    num('nitrogen'),
+    num('sulphur'),
+    num('fixedCarbon'),
+    /** Biochar the network had made from this feedstock when the report was added (m³), to know when the next is due. */
+    num('producedM3'),
+    { name: 'note', type: 'text' },
+    { name: 'uploadedBy', type: 'text' },
+  ],
+}
+
 export const BATCH_STATUSES = [
   { label: 'Started', value: 'started' },
   { label: 'Not assessed', value: 'not_assessed' },

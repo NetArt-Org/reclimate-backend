@@ -1,7 +1,7 @@
 'use client'
 
-import { ChevronDown, ChevronLeft, ChevronRight, Pencil, Search, Sprout } from 'lucide-react'
-import { Fragment, useState } from 'react'
+import { ChevronDown, ChevronLeft, ChevronRight, FlaskConical, Pencil, Search, Sprout } from 'lucide-react'
+import { Fragment, useCallback, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Badge, Button, Card, EmptyState, Input, Switch, Tooltip } from '../components/ui'
@@ -9,7 +9,10 @@ import { useDashboard } from '../data/store'
 import type { Feedstock } from '../data/types'
 import { cn, num } from '../lib/utils'
 import { unwrap } from '../lib/unwrap'
+import type { LabReport, LabStatus } from '../data/lab'
+import { feedstockLab } from '../server/lab-reports'
 import { saveFeedstock } from '../server/settings'
+import { LabReportsModal, LabStatusCells } from './LabReports'
 
 const PAGE_SIZE = 25
 
@@ -36,6 +39,17 @@ export function FeedstocksSection({ onEdit }: { onEdit: (f: Feedstock) => void }
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   // Optimistic volume-tracking values while a save is in flight.
   const [tracking, setTracking] = useState<Record<string, boolean>>({})
+  // Lab reports and per-network status of the feedstocks opened so far.
+  const [lab, setLab] = useState<Record<string, { reports: LabReport[]; statuses: LabStatus[] }>>({})
+  const [labOpen, setLabOpen] = useState<{ feedstockId: string; networkId: string } | null>(null)
+  const loadLab = useCallback(async (id: string) => {
+    try {
+      const r = unwrap(await feedstockLab(id))
+      setLab((l) => ({ ...l, [id]: r }))
+    } catch (err) {
+      toast.error('Could not load the lab reports', { description: err instanceof Error ? err.message : String(err) })
+    }
+  }, [])
 
   const q = query.trim().toLowerCase()
   const rows = data.feedstocks.filter((f) => f.name.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name))
@@ -45,13 +59,15 @@ export function FeedstocksSection({ onEdit }: { onEdit: (f: Feedstock) => void }
   const from = rows.length ? current * PAGE_SIZE + 1 : 0
   const to = current * PAGE_SIZE + shown.length
 
-  const toggleExpand = (id: string) =>
+  const toggleExpand = (id: string) => {
+    if (!expanded.has(id) && !lab[id]) void loadLab(id)
     setExpanded((s) => {
       const n = new Set(s)
       if (n.has(id)) n.delete(id)
       else n.add(id)
       return n
     })
+  }
 
   const setVolumeTracking = async (f: Feedstock, on: boolean) => {
     setTracking((t) => ({ ...t, [f.id]: on }))
@@ -173,6 +189,9 @@ export function FeedstocksSection({ onEdit }: { onEdit: (f: Feedstock) => void }
                                 <th className="px-3 py-2 text-right font-semibold">Bulk density (kg/m³)</th>
                                 <th className="px-3 py-2 text-right font-semibold">Carbon content (%)</th>
                                 <th className="px-3 py-2 text-right font-semibold">Moisture (%)</th>
+                                <th className="px-3 py-2 text-left font-semibold">Since last bulk density</th>
+                                <th className="px-3 py-2 text-left font-semibold">Lab analysis</th>
+                                <th className="px-3 py-2" />
                               </tr>
                             </thead>
                             <tbody>
@@ -184,6 +203,16 @@ export function FeedstocksSection({ onEdit }: { onEdit: (f: Feedstock) => void }
                                     <td className="px-3 py-2 text-right tabular-nums">{dash(ref?.bulkDensity, 1)}</td>
                                     <td className="px-3 py-2 text-right tabular-nums">{dash(ref?.carbonContent)}</td>
                                     <td className="px-3 py-2 text-right tabular-nums">{dash(ref?.moisture)}</td>
+                                    <LabStatusCells status={lab[f.id]?.statuses.find((x) => x.networkId === n.id)} />
+                                    <td className="px-3 py-2 text-right">
+                                      <Button size="sm" variant="outline" onClick={() => setLabOpen({ feedstockId: f.id, networkId: n.id })}>
+                                        <FlaskConical /> Lab reports
+                                        {(() => {
+                                          const c = lab[f.id]?.reports.filter((r) => r.networkId === n.id).length
+                                          return c ? <span className="text-ink-muted">({c})</span> : null
+                                        })()}
+                                      </Button>
+                                    </td>
                                   </tr>
                                 )
                               })}
@@ -199,6 +228,29 @@ export function FeedstocksSection({ onEdit }: { onEdit: (f: Feedstock) => void }
           })}
         </div>
       </div>
+
+      {labOpen &&
+        (() => {
+          const f = data.feedstocks.find((x) => x.id === labOpen.feedstockId)
+          const net = data.networks.find((x) => x.id === labOpen.networkId)
+          if (!f || !net) return null
+          return (
+            <LabReportsModal
+              open
+              onOpenChange={(o) => !o && setLabOpen(null)}
+              feedstock={f.name}
+              feedstockId={f.id}
+              network={{ id: net.id, name: net.name }}
+              status={lab[f.id]?.statuses.find((x) => x.networkId === net.id)}
+              reports={lab[f.id]?.reports.filter((r) => r.networkId === net.id) ?? []}
+              reference={net.config.references.find((r) => r.feedstock === f.name)}
+              onChanged={() => {
+                void loadLab(f.id)
+                reload()
+              }}
+            />
+          )
+        })()}
 
       {rows.length === 0 && (
         <EmptyState

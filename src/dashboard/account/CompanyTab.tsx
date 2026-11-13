@@ -12,10 +12,13 @@ import {
   Phone,
   Plus,
   Shield,
+  FileText,
   Trash2,
+  Upload,
   Wind,
+  X,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { HistoryButton } from '../components/HistoryPanel'
@@ -47,7 +50,8 @@ import {
   REGISTRIES,
 } from '../data/catalog'
 import { useDashboard } from '../data/store'
-import type { Company, FeedstockReference, FeedstockStrategy, Project } from '../data/types'
+import type { Company, DocFile, FeedstockReference, FeedstockStrategy, Project } from '../data/types'
+import { fileSize, readDoc } from '../lib/files'
 import { cn, day, uid } from '../lib/utils'
 import { AppConfigCard } from './AppConfigCard'
 import { ChipPicker, ContactList, DocList, Section } from './parts'
@@ -438,6 +442,12 @@ function FeedstockPortfolio() {
                     </MenuItem>
                   </MenuContent>
                 </Menu>
+                <StrategyDocs
+                  feedstock={f.name}
+                  needed={!!f.strategy}
+                  docs={f.documents ?? []}
+                  onChange={(documents, change) => update({ documents }, change)}
+                />
               </div>
               <Button
                 variant="ghost"
@@ -458,6 +468,62 @@ function FeedstockPortfolio() {
         })}
       </div>
     </Section>
+  )
+}
+
+/** The methane strategy's supporting document(s), which the registry asks for, under a feedstock. */
+function StrategyDocs({ feedstock, needed, docs, onChange }: { feedstock: string; needed: boolean; docs: DocFile[]; onChange: (d: DocFile[], change: string) => void }) {
+  const input = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  return (
+    <div className="mt-1.5 flex flex-col gap-1">
+      {docs.map((d) => (
+        <div key={d.id} className="group/doc flex min-w-0 items-center gap-1.5 text-xs">
+          <FileText className="size-3.5 shrink-0 text-success" />
+          <a href={d.url ?? `/admin/files/${d.id}`} target="_blank" rel="noopener" className="min-w-0 truncate font-semibold hover:underline" title={d.name}>
+            {d.name}
+          </a>
+          <span className="shrink-0 text-ink-subtle">{fileSize(d.size)}</span>
+          <button
+            type="button"
+            aria-label={`Remove ${d.name}`}
+            className="cursor-pointer text-ink-subtle opacity-0 group-hover/doc:opacity-100 hover:text-danger focus-visible:opacity-100"
+            onClick={() => onChange(docs.filter((x) => x.id !== d.id), `${feedstock}: strategy document removed`)}
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => input.current?.click()}
+        className={cn('flex w-fit cursor-pointer items-center gap-1 text-left text-xs font-semibold', needed && !docs.length ? 'text-warn' : 'text-ink-muted hover:text-ink')}
+      >
+        <Upload className="size-3" />
+        {busy ? 'Uploading…' : docs.length ? 'Add another document' : needed ? 'Upload strategy document (required by the registry)' : 'Upload strategy document'}
+      </button>
+      <input
+        ref={input}
+        type="file"
+        hidden
+        accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xlsx,.xls"
+        onChange={async (e) => {
+          const file = e.target.files?.[0]
+          e.target.value = ''
+          if (!file) return
+          setBusy(true)
+          try {
+            const doc = await readDoc(file)
+            onChange([...docs, doc], `${feedstock}: strategy document ${doc.name} added`)
+          } catch (err) {
+            toast.error('Could not upload the file', { description: err instanceof Error ? err.message : String(err) })
+          } finally {
+            setBusy(false)
+          }
+        }}
+      />
+    </div>
   )
 }
 

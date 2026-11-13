@@ -240,9 +240,25 @@ export async function resolveAlert(id: string, status: Exclude<Alert['status'], 
     // A kiln a field user asked for: approving adds it to their site.
     const kilnReq = alert.request as Alert['kilnRequest'] | null
     if (status === 'approved' && kilnReq?.kiln && kilnReq.siteId) {
-      await payload.create({
+      const kiln = await payload.create({
         collection: 'kilns',
-        data: { site: kilnReq.siteId, name: kilnReq.kiln, type: 'kontiki', volumeM3: kilnReq.volumeL ? kilnReq.volumeL / 1000 : null, active: true } as never,
+        data: {
+          site: kilnReq.siteId,
+          name: kilnReq.kiln,
+          type: kilnReq.kilnType === 'pit' ? 'pit' : 'kontiki',
+          shape: kilnReq.shape ?? null,
+          dimensions: kilnReq.dimensions ?? null,
+          volumeM3: kilnReq.volumeL ? kilnReq.volumeL / 1000 : null,
+          active: true,
+        } as never,
+        overrideAccess: true,
+      })
+      // The measuring photo taken in the app moves from the request to the new kiln.
+      await payload.update({
+        collection: 'files',
+        where: { and: [{ ownerCollection: { equals: 'alerts' } }, { ownerId: { equals: String(alert.id) } }] },
+        data: { ownerCollection: 'kilns', ownerId: String(kiln.id), category: 'kiln' },
+        depth: 0,
         overrideAccess: true,
       })
     }

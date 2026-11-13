@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url'
 import { Documents, Sinks, Stocks } from './collections/credits'
 import { SellRequests, SiteLists } from './collections/field'
 import { BiomassSources, Containers, Kilns, Networks, Organizations, People, Sites, Vehicles } from './collections/network'
-import { Applications, Batches, BiomassCollections, Feedstocks, Inventories, Mixings, Packagings } from './collections/production'
+import { Applications, Batches, BiomassCollections, Feedstocks, Inventories, LabReports, Mixings, Packagings } from './collections/production'
 import { ActivityLogs, Alerts, Files, Templates } from './collections/system'
 import { Users } from './collections/Users'
 import { Company } from './globals/Company'
@@ -40,6 +40,7 @@ export default buildConfig({
     Containers,
     BiomassSources,
     Feedstocks,
+    LabReports,
     Batches,
     BiomassCollections,
     Mixings,

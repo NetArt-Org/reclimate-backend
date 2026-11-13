@@ -156,6 +156,8 @@ export function slotOf(f: Pick<FileRow, 'category' | 'mimeType' | 'ownerCollecti
       return 'quench'
     case 'kiln_process_biomass_moisture':
       return 'moist'
+    case 'temperature':
+      return 'tempPh'
     case 'transportation':
       return 'bphoto'
     case 'packaging':

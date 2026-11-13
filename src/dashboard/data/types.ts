@@ -1,3 +1,4 @@
+import type { LabStatus } from './lab'
 /**
  * Dashboard data model, loaded from Neon by src/dashboard/server/load.ts.
  * Each entity maps onto a Payload collection (organizations, networks, sites, kilns, people, …).
@@ -35,6 +36,8 @@ export interface PortfolioFeedstock {
   strategy: FeedstockStrategy
   /** Has a site-specific carbon (SPC) value. */
   spc: boolean
+  /** The methane strategy document the registry asks for (uploaded files). */
+  documents?: DocFile[]
 }
 
 /** Field-app rules for one kind of network (or the company default). */
@@ -262,7 +265,18 @@ export interface Alert {
   /** For bulk-density requests: the change being asked for (kg/m³). */
   request?: { feedstock: string; bulkDensity: number; by: string }
   /** A kiln a field user asked to add to their site. */
-  kilnRequest?: { kiln: string; volumeL: number | null; siteId: string; site?: string; by: string }
+  kilnRequest?: {
+    kiln: string
+    volumeL: number | null
+    siteId: string
+    site?: string
+    by: string
+    /** Sent by app 2.8+: what the field user measured. Dimensions in mm. */
+    kilnType?: 'kontiki' | 'pit'
+    shape?: string | null
+    dimensions?: Record<string, number> | null
+    photoIds?: string[]
+  }
   /** For a self-registration from the field app. */
   registration?: {
     name: string
@@ -332,6 +346,8 @@ export interface DashboardData {
   production: Production[]
   alerts: Alert[]
   logs: LogEntry[]
+  /** Network × feedstock pairs whose bulk-density report or lab analysis is due. */
+  labDue: LabStatus[]
 }
 
 export type PeriodKind = 'all' | 'month' | 'year' | 'custom'

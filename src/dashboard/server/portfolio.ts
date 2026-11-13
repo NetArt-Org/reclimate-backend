@@ -16,6 +16,8 @@ export interface PortfolioDocument {
   reference: string
   issuedAt: string | null
   expiresAt: string | null
+  /** The project (partner organisation) it belongs to; null = not assigned to one. */
+  organizationId: string | null
   file: { id: string; name: string; size: number; type: string } | null
 }
 
@@ -116,6 +118,7 @@ export async function loadPortfolioExtras() {
           reference: d.reference ?? '',
           issuedAt: d.issuedAt ?? null,
           expiresAt: d.expiresAt ?? null,
+          organizationId: relId(d.organization) ?? null,
           file: f ? { id: String(f.id), name: f.name, size: f.size ?? 0, type: f.mimeType } : null,
         }
       }),
@@ -191,7 +194,9 @@ function documentFields(form: FormData) {
     if (!DATE.test(v)) throw new UserError('Use a valid date')
     return v
   }
-  return { title, category: category as (typeof DOC_CATEGORIES)[number], reference, issuedAt: date('issuedAt'), expiresAt: date('expiresAt') }
+  const org = String(form.get('organization') ?? '').trim()
+  if (org && !/^[\w-]{1,64}$/.test(org)) throw new UserError('Choose a project')
+  return { title, category: category as (typeof DOC_CATEGORIES)[number], reference, issuedAt: date('issuedAt'), expiresAt: date('expiresAt'), organization: org || null }
 }
 
 function formFile(form: FormData) {

@@ -77,6 +77,7 @@ export interface Config {
     containers: Container;
     'biomass-sources': BiomassSource;
     feedstocks: Feedstock;
+    'lab-reports': LabReport;
     batches: Batch;
     'biomass-collections': BiomassCollection;
     mixings: Mixing;
@@ -109,6 +110,7 @@ export interface Config {
     containers: ContainersSelect<false> | ContainersSelect<true>;
     'biomass-sources': BiomassSourcesSelect<false> | BiomassSourcesSelect<true>;
     feedstocks: FeedstocksSelect<false> | FeedstocksSelect<true>;
+    'lab-reports': LabReportsSelect<false> | LabReportsSelect<true>;
     batches: BatchesSelect<false> | BatchesSelect<true>;
     'biomass-collections': BiomassCollectionsSelect<false> | BiomassCollectionsSelect<true>;
     mixings: MixingsSelect<false> | MixingsSelect<true>;
@@ -523,6 +525,57 @@ export interface Feedstock {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "lab-reports".
+ */
+export interface LabReport {
+  id: string;
+  feedstock: string | Feedstock;
+  network: string | Network;
+  kind: 'bulk-density' | 'analysis';
+  reportDate: string;
+  file?: (string | null) | File;
+  /**
+   * kg/m³
+   */
+  bulkDensity?: number | null;
+  carbonTotal?: number | null;
+  carbonOrganic?: number | null;
+  carbonInorganic?: number | null;
+  hydrogen?: number | null;
+  hcRatio?: number | null;
+  ash?: number | null;
+  ph?: number | null;
+  waterHoldingCapacity?: number | null;
+  nitrogen?: number | null;
+  sulphur?: number | null;
+  fixedCarbon?: number | null;
+  producedM3?: number | null;
+  note?: string | null;
+  uploadedBy?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "files".
+ */
+export interface File {
+  id: string;
+  name: string;
+  mimeType: string;
+  size?: number | null;
+  storagePath?: string | null;
+  sourcePath?: string | null;
+  category?: string | null;
+  ownerCollection?: string | null;
+  ownerId?: string | null;
+  status?: ('stored' | 'pending' | 'failed') | null;
+  data?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "batches".
  */
 export interface Batch {
@@ -850,6 +903,7 @@ export interface Document {
   title: string;
   category: 'csi-compliance' | 'certificate' | 'other';
   reference?: string | null;
+  organization?: (string | null) | Organization;
   issuedAt?: string | null;
   expiresAt?: string | null;
   file?: (string | null) | File;
@@ -862,25 +916,6 @@ export interface Document {
     | number
     | boolean
     | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "files".
- */
-export interface File {
-  id: string;
-  name: string;
-  mimeType: string;
-  size?: number | null;
-  storagePath?: string | null;
-  sourcePath?: string | null;
-  category?: string | null;
-  ownerCollection?: string | null;
-  ownerId?: string | null;
-  status?: ('stored' | 'pending' | 'failed') | null;
-  data?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -984,6 +1019,15 @@ export interface SiteList {
   category: 'bags' | 'crops' | 'buyers';
   name: string;
   detail?: string | null;
+  data?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   createdBy?: (string | null) | Person;
   updatedAt: string;
   createdAt: string;
@@ -1051,6 +1095,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'feedstocks';
         value: string | Feedstock;
+      } | null)
+    | ({
+        relationTo: 'lab-reports';
+        value: string | LabReport;
       } | null)
     | ({
         relationTo: 'batches';
@@ -1358,6 +1406,35 @@ export interface FeedstocksSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "lab-reports_select".
+ */
+export interface LabReportsSelect<T extends boolean = true> {
+  id?: T;
+  feedstock?: T;
+  network?: T;
+  kind?: T;
+  reportDate?: T;
+  file?: T;
+  bulkDensity?: T;
+  carbonTotal?: T;
+  carbonOrganic?: T;
+  carbonInorganic?: T;
+  hydrogen?: T;
+  hcRatio?: T;
+  ash?: T;
+  ph?: T;
+  waterHoldingCapacity?: T;
+  nitrogen?: T;
+  sulphur?: T;
+  fixedCarbon?: T;
+  producedM3?: T;
+  note?: T;
+  uploadedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "batches_select".
  */
 export interface BatchesSelect<T extends boolean = true> {
@@ -1589,6 +1666,7 @@ export interface DocumentsSelect<T extends boolean = true> {
   title?: T;
   category?: T;
   reference?: T;
+  organization?: T;
   issuedAt?: T;
   expiresAt?: T;
   file?: T;
@@ -1691,6 +1769,7 @@ export interface SiteListsSelect<T extends boolean = true> {
   category?: T;
   name?: T;
   detail?: T;
+  data?: T;
   createdBy?: T;
   updatedAt?: T;
   createdAt?: T;

@@ -20,7 +20,8 @@ interface Flow {
 export interface SiteStats {
   biochar: { totalL: number; approvedL: number; rejectedL: number; pendingL: number; mixedL: number; shipped: Flow; applied: Flow }
   batches: { inProgress: number; waiting: number; approved: number; rejected: number; total: number }
-  biomass: { totalKg: number; collections: number; byFeedstock: { feedstock: string; kg: number; count: number }[] }
+  /** Biomass collected per feedstock, how much burns used, and what is left in stock (kg). */
+  biomass: { totalKg: number; collections: number; byFeedstock: { feedstock: string; kg: number; count: number; usedKg: number; remainingKg: number }[] }
   mixing: { byType: { type: string; biocharL: number; kg: number; count: number }[]; count: number }
   packing: { type: string; bag: string; bags: number; remaining: number; kg: number }[]
   /** Approved biochar not yet used in a mixing (litres). */
@@ -39,7 +40,7 @@ async function loadStats(ctx: FieldContext): Promise<SiteStats> {
   const site = ctx.siteId
   if (!site) return emptyStats()
   const db = ctx.payload.db.drizzle
-  const [batches, trend, biomass, mixed, packed, applied] = await Promise.all([
+  const [batches, trend, biomass, mixed, packed, applied, used] = await Promise.all([
     db.execute(sql`
       select status, count(*) as n, coalesce(sum(biochar_l), 0) as l, coalesce(sum(biomass_kg), 0) as kg
       from batches where site_id = ${site} group by status`),
@@ -48,7 +49,7 @@ async function loadStats(ctx: FieldContext): Promise<SiteStats> {
       from batches where site_id = ${site} and date >= now() - interval '30 days' group by 1 order by 1`),
     db.execute(sql`
       select coalesce(nullif(trim(feedstock), ''), 'Other') as feedstock, coalesce(sum(quantity_kg), 0) as kg, count(*) as n
-      from biomass_collections where site_id = ${site} group by 1 order by 2 desc`),
+      from biomass_collections where site_id = ${site} and voided is not true group by 1 order by 2 desc`),
     db.execute(sql`
       select coalesce(nullif(trim(mixing_type), ''), 'Other') as type, coalesce(sum(biochar_l), 0) as l, coalesce(sum(total_kg), 0) as kg, count(*) as n
       from mixings where site_id = ${site} group by 1 order by 2 desc`),
@@ -63,6 +64,10 @@ async function loadStats(ctx: FieldContext): Promise<SiteStats> {
         coalesce(sum(case when lower(coalesce(quantity_unit, '')) = 'kg' then quantity else 0 end), 0) as kg,
         coalesce(sum(bags), 0) as bags, count(*) as n
       from applications where site_id = ${site} group by 1`),
+    // Biomass burnt (the step-by-step app records the collection with the batch, so it is both collected and used).
+    db.execute(sql`
+      select coalesce(nullif(trim(feedstock), ''), 'Other') as feedstock, coalesce(sum(biomass_kg), 0) as kg
+      from batches where site_id = ${site} and voided is not true group by 1`),
   ])
 
   const by = new Map((batches.rows as { status: string; n: unknown; l: unknown; kg: unknown }[]).map((r) => [r.status, r]))
@@ -81,7 +86,11 @@ async function loadStats(ctx: FieldContext): Promise<SiteStats> {
     return { day: d, litres: perDay.get(d) ?? 0 }
   })
 
-  const feedstocks = (biomass.rows as { feedstock: string; kg: unknown; n: unknown }[]).map((r) => ({ feedstock: r.feedstock, kg: n(r.kg), count: n(r.n) }))
+  const usedBy = new Map((used.rows as { feedstock: string; kg: unknown }[]).map((r) => [r.feedstock, n(r.kg)]))
+  const feedstocks = (biomass.rows as { feedstock: string; kg: unknown; n: unknown }[]).map((r) => {
+    const usedKg = usedBy.get(r.feedstock) ?? 0
+    return { feedstock: r.feedstock, kg: n(r.kg), count: n(r.n), usedKg, remainingKg: Math.max(0, Math.round(n(r.kg) - usedKg)) }
+  })
   return {
     biochar: {
       totalL: sum([...APPROVED, ...REJECTED, ...PENDING], 'l'),

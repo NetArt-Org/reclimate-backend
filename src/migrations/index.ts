@@ -7,6 +7,7 @@ import * as migration_20261012_120000_field_rate_limits from './20261012_120000_
 import * as migration_20261012_180000_field_idempotency from './20261012_180000_field_idempotency';
 import * as migration_20261026_143324_admin_history_void from './20261026_143324_admin_history_void';
 import * as migration_20261102_120000_staff_app_access from './20261102_120000_staff_app_access';
+import * as migration_20261113_141620_field_details_lab_reports from './20261113_141620_field_details_lab_reports';
 
 export const migrations = [
   {
@@ -47,11 +48,16 @@ export const migrations = [
   {
     up: migration_20261026_143324_admin_history_void.up,
     down: migration_20261026_143324_admin_history_void.down,
-    name: '20261026_143324_admin_history_void'
+    name: '20261026_143324_admin_history_void',
   },
   {
     up: migration_20261102_120000_staff_app_access.up,
     down: migration_20261102_120000_staff_app_access.down,
     name: '20261102_120000_staff_app_access',
+  },
+  {
+    up: migration_20261113_141620_field_details_lab_reports.up,
+    down: migration_20261113_141620_field_details_lab_reports.down,
+    name: '20261113_141620_field_details_lab_reports'
   },
 ];

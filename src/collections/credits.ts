@@ -78,6 +78,8 @@ export const Documents: CollectionConfig = {
       ],
     },
     { name: 'reference', type: 'text' },
+    /** The project (partner organisation) the document is for; empty = shown only under "All organisations". */
+    rel('organization', 'organizations'),
     { name: 'issuedAt', type: 'date' },
     { name: 'expiresAt', type: 'date' },
     rel('file', 'files'),

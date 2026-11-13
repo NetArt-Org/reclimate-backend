@@ -57,6 +57,8 @@ export const SiteLists: CollectionConfig = {
     },
     { name: 'name', type: 'text', required: true },
     { name: 'detail', type: 'text' },
+    /** Packaging bags: { type, measure: 'weight' | 'volume', capacity, unit: 'kg' | 'L' }. */
+    { name: 'data', type: 'json' },
     rel('createdBy', 'people'),
   ],
 }

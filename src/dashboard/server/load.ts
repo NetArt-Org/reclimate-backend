@@ -22,6 +22,7 @@ import { STAFF_ROLES } from '@/field/auth'
 import { phoneKey } from '@/lib/phone'
 
 import { withAppDefaults } from '../data/catalog'
+import { labStatuses } from './lab-status'
 import { DASHBOARD_TAG, db, n, relId, relIds } from './payload'
 
 /** SQL for the credit bucket of a batch — the single definition of the portfolio statuses. */
@@ -51,7 +52,7 @@ async function readDashboardData(): Promise<DashboardData> {
   const payload = await db()
   const drizzle = payload.db.drizzle
 
-  const [company, orgs, networks, sites, kilns, people, feedstocks, alerts, logs, production, portfolio, sampling, lastBatch, sellRequests, registrations] = await Promise.all([
+  const [company, orgs, networks, sites, kilns, people, feedstocks, alerts, logs, production, portfolio, sampling, lastBatch, sellRequests, registrations, lab] = await Promise.all([
     payload.findGlobal({ slug: 'company', depth: 0, overrideAccess: true }),
     payload.find({ collection: 'organizations', ...noRaw, sort: 'code' }),
     payload.find({ collection: 'networks', ...noRaw, sort: 'name' }),
@@ -87,6 +88,8 @@ async function readDashboardData(): Promise<DashboardData> {
     payload.find({ collection: 'sell-requests', where: { status: { equals: 'pending' } }, depth: 1, overrideAccess: true, pagination: false, sort: '-createdAt' }),
     // People who signed up in the field app and wait for an admin.
     payload.find({ collection: 'people', where: { registrationStatus: { equals: 'pending' } }, depth: 1, overrideAccess: true, pagination: false, sort: '-createdAt', select: { name: true, email: true, phone: true, role: true, sites: true, networks: true, createdAt: true } }),
+    // Bulk-density reports (every 100 m³) and lab analyses (yearly) that are due.
+    labStatuses(),
   ])
 
   // A sign-up whose phone number belongs to exactly one person without an app login (migrated, or added by an admin).
@@ -294,5 +297,6 @@ async function readDashboardData(): Promise<DashboardData> {
     logs: logs.docs.map(
       (l): LogEntry => ({ id: String(l.id), message: l.message, date: l.at ?? l.createdAt, networkId: relId(l.network) }),
     ),
+    labDue: lab.filter((x) => x.bulkDensityDue || x.analysisDue),
   }
 }

@@ -5,7 +5,8 @@ import type { Where } from 'payload'
 import type { Person } from '@/payload-types'
 import { FieldError, relId, relIds, type FieldContext } from './auth'
 import { memo, TTL } from './cache'
-import { all, emptyPage, num, PAGE_SIZE, requireSite, siteNetwork, text, type Page } from './common'
+import { cleanDimensions, isShape, volumeLitresMm, type ShapeKind } from '@/lib/shape-volume'
+import { all, claimFiles, emptyPage, lat, lng, mediaIds, num, PAGE_SIZE, qty, requireSite, siteNetwork, text, type Page } from './common'
 import { ddmmyyyy } from './map'
 
 /* ------------------------------------------------------------------ */
@@ -93,28 +94,76 @@ export async function kilnRequests(ctx: FieldContext): Promise<Item[]> {
     .map(({ a, r }) => ({ id: `request:${a.id}`, name: r!.kiln!, sub: r!.volumeL ? `${r!.volumeL} L` : '', pending: true }))
 }
 
+/** Structured details the app sends with a new item (all optional, so older app versions keep working). */
+export interface SetupDetails {
+  /** Kilns: kontiki | pit. */
+  kilnType?: unknown
+  /** Kilns and containers: shape and dimensions in millimetres (see lib/shape-volume). */
+  shape?: unknown
+  dimensions?: unknown
+  /** Biomass sources: where it is. */
+  lat?: unknown
+  lng?: unknown
+  /** Packaging bags. */
+  bagType?: unknown
+  measure?: unknown
+  capacity?: unknown
+}
+
+const BAG_MEASURES = ['weight', 'volume'] as const
+const KILN_TYPES = ['kontiki', 'pit'] as const
+const litres = (l: number | null) => (l == null ? null : l >= 100 ? Math.round(l) : +l.toFixed(1))
+
 /**
  * POST setup/<key> — add to a site list. A kiln and a biomass reference (bulk density) are requests the admin
- * approves in the Action Center; the other lists change straight away.
+ * approves in the Action Center; the other lists change straight away. Kilns and containers come with their shape,
+ * dimensions and a photo of the measuring (the volume is worked out here); sources with their location; bags with
+ * their type and capacity.
  */
-export async function addSetupItem(ctx: FieldContext, key: string, body: { name?: string; sub?: string }) {
+export async function addSetupItem(ctx: FieldContext, key: string, body: { name?: string; sub?: string; details?: SetupDetails; photoIds?: unknown }) {
   if (!isSetupKey(key)) throw new FieldError(404, 'Unknown list.')
   const name = text(body.name, 120)
   if (!name) throw new FieldError(400, 'Please enter a name.')
   const sub = text(body.sub, 120)
+  const d: SetupDetails = body.details && typeof body.details === 'object' ? body.details : {}
+  const photos = mediaIds(body.photoIds).slice(0, 5)
   const siteId = requireSite(ctx)
   const { network, site } = await siteNetwork(ctx, siteId)
   const { payload } = ctx
   const subNum = num(sub)
+
+  // Shape → dimensions (mm) → volume. A shape with incomplete dimensions is refused rather than stored half-done.
+  const measured = (kind: ShapeKind) => {
+    if (d.shape == null || d.shape === '') return null
+    if (!isShape(kind, d.shape)) throw new FieldError(400, 'Unknown shape.')
+    const dimensions = cleanDimensions(kind, d.shape, d.dimensions)
+    if (!dimensions) throw new FieldError(400, 'Please enter every dimension.')
+    const volumeL = volumeLitresMm(kind, d.shape, dimensions)
+    if (!volumeL) throw new FieldError(400, 'Please enter every dimension.')
+    return { shape: d.shape, dimensions, volumeL: litres(volumeL)! }
+  }
+
   let id: string
+  let shown = sub
   switch (key) {
     case 'kilns': {
+      const m = measured('kiln')
+      const kilnType = (KILN_TYPES as readonly string[]).includes(String(d.kilnType)) ? (d.kilnType as (typeof KILN_TYPES)[number]) : 'kontiki'
+      const volumeL = m?.volumeL ?? subNum
       const a = await payload.create({
         collection: 'alerts',
-        data: { kind: 'kiln', message: `${ctx.person.name} asks to add kiln "${name}" at ${site.name}`, network, status: 'open', request: { kiln: name, volumeL: subNum, siteId, site: site.name, by: ctx.person.name } },
+        data: {
+          kind: 'kiln',
+          message: `${ctx.person.name} asks to add kiln "${name}" at ${site.name}`,
+          network,
+          status: 'open',
+          request: { kiln: name, volumeL, siteId, site: site.name, by: ctx.person.name, kilnType, shape: m?.shape ?? null, dimensions: m?.dimensions ?? null, photoIds: photos },
+        },
         ...all,
       })
-      return { item: { id: `request:${a.id}`, name, sub: subNum ? `${subNum} L` : '', pending: true } }
+      // The measuring photo stays with the request until the admin decides; approving moves it to the kiln.
+      await claimFiles(ctx, photos, 'alerts', a.id, 'kiln')
+      return { item: { id: `request:${a.id}`, name, sub: [kilnType === 'pit' ? 'Pit' : 'Kon-Tiki', volumeL ? `${volumeL} L` : ''].filter(Boolean).join(' · '), pending: true } }
     }
     case 'bioref': {
       if (!subNum || subNum <= 0) throw new FieldError(400, 'Please enter the bulk density (kg/m³).')
@@ -126,7 +175,7 @@ export async function addSetupItem(ctx: FieldContext, key: string, body: { name?
       return { item: { id: `request:${a.id}`, name, sub: `${subNum} kg/m³`, pending: true } }
     }
     case 'sources':
-      id = (await payload.create({ collection: 'biomass-sources', data: { site: siteId, network, name, address: sub || null } as never, ...all })).id
+      id = (await payload.create({ collection: 'biomass-sources', data: { site: siteId, network, name, address: sub || null, lat: lat(d.lat), lng: lng(d.lng) } as never, ...all })).id
       break
     case 'farmers': {
       const net = await payload.findByID({ collection: 'networks', id: network, ...all, select: { organization: true } })
@@ -137,13 +186,41 @@ export async function addSetupItem(ctx: FieldContext, key: string, body: { name?
       id = (await payload.create({ collection: 'vehicles', data: { site: siteId, network, name, plate: sub || '—' } as never, ...all })).id
       break
     case 'measure':
-    case 'sample':
-      id = (await payload.create({ collection: 'containers', data: { kind: key === 'measure' ? 'measuring' : 'sampling', site: siteId, network, name, volumeL: subNum, addedAt: new Date().toISOString() } as never, ...all })).id
+    case 'sample': {
+      const m = measured('container')
+      const volumeL = m?.volumeL ?? subNum
+      id = (
+        await payload.create({
+          collection: 'containers',
+          data: { kind: key === 'measure' ? 'measuring' : 'sampling', site: siteId, network, name, volumeL, shape: m?.shape ?? null, dimensions: m?.dimensions ?? null, addedAt: new Date().toISOString() } as never,
+          ...all,
+        })
+      ).id
+      await claimFiles(ctx, photos, 'containers', id, key === 'measure' ? 'measuring_container' : 'sampling_container')
+      shown = volumeL ? `${volumeL} L` : ''
       break
+    }
+    case 'bags': {
+      const measure = (BAG_MEASURES as readonly string[]).includes(String(d.measure)) ? String(d.measure) : 'weight'
+      const capacity = qty(d.capacity ?? sub, 100_000)
+      const unit = measure === 'volume' ? 'L' : 'kg'
+      const bagType = text(d.bagType, 60)
+      const detail = [capacity ? `${capacity} ${unit}` : '', bagType].filter(Boolean).join(' · ') || sub
+      id = (
+        await payload.create({
+          collection: 'site-lists',
+          data: { site: siteId, category: key, name, detail: detail || null, data: { bagType: bagType || null, measure, capacity, unit }, createdBy: ctx.person.id } as never,
+          ...all,
+        })
+      ).id
+      await claimFiles(ctx, photos, 'site-lists', id, 'packaging')
+      shown = detail
+      break
+    }
     default:
       id = (await payload.create({ collection: 'site-lists', data: { site: siteId, category: key, name, detail: sub || null, createdBy: ctx.person.id } as never, ...all })).id
   }
-  return { item: { id, name, sub } }
+  return { item: { id, name, sub: shown } }
 }
 
 /** DELETE setup/<key>/<id> — remove from a site list. Kilns, sources and farmers are switched off (batches still refer to them). */

@@ -9,11 +9,17 @@ import { Badge, Button, Card, ConfirmDialog, EmptyState, Field, Input, Menu, Men
 import { fileSize } from '../lib/files'
 import { day } from '../lib/utils'
 import { unwrap } from '../lib/unwrap'
+import { useDashboard } from '../data/store'
 import { addDocument, deleteDocument, updateDocument, type PortfolioDocument } from '../server/portfolio'
 
 const CATEGORY: Record<string, string> = { 'csi-compliance': 'CSI compliance', certificate: 'Certificate', other: 'Other' }
 
-export function DocumentsTab({ documents }: { documents: PortfolioDocument[] }) {
+export function DocumentsTab({ documents: all }: { documents: PortfolioDocument[] }) {
+  const { data, filters } = useDashboard()
+  // With a project chosen in the Organisation filter, only that project's documents.
+  const project = filters.orgId ? data.orgs.find((o) => o.id === filters.orgId) : null
+  const documents = filters.orgId ? all.filter((d) => d.organizationId === filters.orgId) : all
+  const orgName = (id: string | null) => (id ? data.orgs.find((o) => o.id === id)?.name : null)
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<PortfolioDocument | null>(null)
   const [removing, setRemoving] = useState<PortfolioDocument | null>(null)
@@ -37,7 +43,9 @@ export function DocumentsTab({ documents }: { documents: PortfolioDocument[] }) 
         </span>
         <div className="min-w-[12rem] flex-1">
           <h2 className="font-bold">Compliance documents</h2>
-          <p className="text-sm text-ink-muted">Certificates, verification statements and producer lists for the registry.</p>
+          <p className="text-sm text-ink-muted">
+            {project ? `Documents for ${project.name}.` : 'Certificates, verification statements and producer lists for the registry.'}
+          </p>
         </div>
         <Badge>{documents.length} docs</Badge>
         <Button size="sm" variant="primary" onClick={() => setAdding(true)}>
@@ -57,7 +65,7 @@ export function DocumentsTab({ documents }: { documents: PortfolioDocument[] }) 
                   {d.title}
                 </div>
                 <div className="truncate text-xs text-ink-muted">
-                  {[d.issuedAt && day(d.issuedAt), d.reference, CATEGORY[d.category]].filter(Boolean).join(' · ')}
+                  {[!project && orgName(d.organizationId), d.issuedAt && day(d.issuedAt), d.reference, CATEGORY[d.category]].filter(Boolean).join(' · ')}
                   {d.file ? ` · ${fileSize(d.file.size)}` : ' · no file attached'}
                 </div>
               </div>
@@ -91,10 +99,14 @@ export function DocumentsTab({ documents }: { documents: PortfolioDocument[] }) 
           ))}
         </ul>
       ) : (
-        <EmptyState icon={<FileText />} title="No documents yet" sub="Add the CSI certificate, verification statements and producer lists." />
+        <EmptyState
+          icon={<FileText />}
+          title={project ? `No documents for ${project.name}` : 'No documents yet'}
+          sub={project ? 'Add one, or assign an existing document to this project (Edit → Project).' : 'Add the CSI certificate, verification statements and producer lists.'}
+        />
       )}
 
-      <DocumentForm open={adding} onOpenChange={setAdding} />
+      <DocumentForm key={`new-${filters.orgId ?? ''}`} defaultOrg={filters.orgId} open={adding} onOpenChange={setAdding} />
       <DocumentForm key={editing?.id} doc={editing ?? undefined} open={!!editing} onOpenChange={(o) => !o && setEditing(null)} />
       <ConfirmDialog
         open={!!removing}
@@ -109,7 +121,8 @@ export function DocumentsTab({ documents }: { documents: PortfolioDocument[] }) 
 }
 
 /** Add a document, or edit one (details, replace or remove its file). */
-function DocumentForm({ doc, open, onOpenChange }: { doc?: PortfolioDocument; open: boolean; onOpenChange: (o: boolean) => void }) {
+function DocumentForm({ doc, defaultOrg, open, onOpenChange }: { doc?: PortfolioDocument; defaultOrg?: string | null; open: boolean; onOpenChange: (o: boolean) => void }) {
+  const { data } = useDashboard()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [file, setFile] = useState<File | null>(null)
@@ -157,6 +170,16 @@ function DocumentForm({ doc, open, onOpenChange }: { doc?: PortfolioDocument; op
             <Input name="expiresAt" type="date" defaultValue={doc?.expiresAt?.slice(0, 10)} />
           </Field>
         </div>
+        <Field label="Project" hint="The document shows when this project is chosen in the Organisation filter.">
+          <NativeSelect name="organization" defaultValue={doc ? (doc.organizationId ?? '') : (defaultOrg ?? '')}>
+            <option value="">No project (shown under All organisations only)</option>
+            {data.orgs.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name} ({o.code})
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
         <Field label="Category">
           <NativeSelect name="category" defaultValue={doc?.category ?? 'csi-compliance'}>
             {Object.entries(CATEGORY).map(([v, l]) => (

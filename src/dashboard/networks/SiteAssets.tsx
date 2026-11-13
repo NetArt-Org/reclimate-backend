@@ -90,7 +90,7 @@ const KILN_TYPE: Record<Kiln['type'], string> = { kontiki: 'Kon-Tiki', pit: 'Pit
 const isDiameter = (k: string) => /diam/i.test(k)
 const diameterRank = (k: string) => (/upper|top/i.test(k) ? 0 : /lower|bottom|base/i.test(k) ? 2 : 1)
 const restRank = (k: string) => (/length/i.test(k) ? 0 : /width/i.test(k) ? 1 : /height|depth/i.test(k) ? 2 : 3)
-const human = (k: string) => {
+export const human = (k: string) => {
   const t = k.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase()
   return t.charAt(0).toUpperCase() + t.slice(1)
 }
