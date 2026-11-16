@@ -1,10 +1,12 @@
 'use client'
 
 import { ChevronDown, ChevronLeft, ChevronRight, FlaskConical, Pencil, Search, Sprout } from 'lucide-react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Fragment, useCallback, useState } from 'react'
 import { toast } from 'sonner'
 
-import { Badge, Button, Card, EmptyState, Input, Switch, Tooltip } from '../components/ui'
+import { Badge, Button, buttonVariants, Card, EmptyState, Input, Switch, Tooltip } from '../components/ui'
 import { useDashboard } from '../data/store'
 import type { Feedstock } from '../data/types'
 import { cn, num } from '../lib/utils'
@@ -12,7 +14,10 @@ import { unwrap } from '../lib/unwrap'
 import type { LabReport, LabStatus } from '../data/lab'
 import { feedstockLab } from '../server/lab-reports'
 import { saveFeedstock } from '../server/settings'
-import { LabReportsModal, LabStatusCells } from './LabReports'
+import { LabStatusCells } from './LabReports'
+
+/** The page of one feedstock's lab reports at one network. */
+const labHref = (feedstockId: string, networkId: string) => `/admin/settings/feedstocks/${encodeURIComponent(feedstockId)}/${encodeURIComponent(networkId)}`
 
 const PAGE_SIZE = 25
 
@@ -41,7 +46,7 @@ export function FeedstocksSection({ onEdit }: { onEdit: (f: Feedstock) => void }
   const [tracking, setTracking] = useState<Record<string, boolean>>({})
   // Lab reports and per-network status of the feedstocks opened so far.
   const [lab, setLab] = useState<Record<string, { reports: LabReport[]; statuses: LabStatus[] }>>({})
-  const [labOpen, setLabOpen] = useState<{ feedstockId: string; networkId: string } | null>(null)
+  const router = useRouter()
   const loadLab = useCallback(async (id: string) => {
     try {
       const r = unwrap(await feedstockLab(id))
@@ -198,20 +203,25 @@ export function FeedstocksSection({ onEdit }: { onEdit: (f: Feedstock) => void }
                               {nets.map((n) => {
                                 const ref = n.config.references.find((r) => r.feedstock === f.name)
                                 return (
-                                  <tr key={n.id} className="border-b border-line last:border-0">
+                                  <tr
+                                    key={n.id}
+                                    className="cursor-pointer border-b border-line last:border-0 hover:bg-muted/60"
+                                    onClick={() => router.push(labHref(f.id, n.id))}
+                                    title={`Open the lab reports of ${f.name} at ${n.name}`}
+                                  >
                                     <td className="px-3 py-2 font-medium">{n.name}</td>
                                     <td className="px-3 py-2 text-right tabular-nums">{dash(ref?.bulkDensity, 1)}</td>
                                     <td className="px-3 py-2 text-right tabular-nums">{dash(ref?.carbonContent)}</td>
                                     <td className="px-3 py-2 text-right tabular-nums">{dash(ref?.moisture)}</td>
                                     <LabStatusCells status={lab[f.id]?.statuses.find((x) => x.networkId === n.id)} />
                                     <td className="px-3 py-2 text-right">
-                                      <Button size="sm" variant="outline" onClick={() => setLabOpen({ feedstockId: f.id, networkId: n.id })}>
+                                      <Link href={labHref(f.id, n.id)} onClick={(e) => e.stopPropagation()} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
                                         <FlaskConical /> Lab reports
                                         {(() => {
                                           const c = lab[f.id]?.reports.filter((r) => r.networkId === n.id).length
                                           return c ? <span className="text-ink-muted">({c})</span> : null
                                         })()}
-                                      </Button>
+                                      </Link>
                                     </td>
                                   </tr>
                                 )
@@ -228,29 +238,6 @@ export function FeedstocksSection({ onEdit }: { onEdit: (f: Feedstock) => void }
           })}
         </div>
       </div>
-
-      {labOpen &&
-        (() => {
-          const f = data.feedstocks.find((x) => x.id === labOpen.feedstockId)
-          const net = data.networks.find((x) => x.id === labOpen.networkId)
-          if (!f || !net) return null
-          return (
-            <LabReportsModal
-              open
-              onOpenChange={(o) => !o && setLabOpen(null)}
-              feedstock={f.name}
-              feedstockId={f.id}
-              network={{ id: net.id, name: net.name }}
-              status={lab[f.id]?.statuses.find((x) => x.networkId === net.id)}
-              reports={lab[f.id]?.reports.filter((r) => r.networkId === net.id) ?? []}
-              reference={net.config.references.find((r) => r.feedstock === f.name)}
-              onChanged={() => {
-                void loadLab(f.id)
-                reload()
-              }}
-            />
-          )
-        })()}
 
       {rows.length === 0 && (
         <EmptyState

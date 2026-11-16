@@ -1,15 +1,15 @@
 'use client'
 
-import { Download, FileText, FlaskConical, Scale, Trash2, Upload } from 'lucide-react'
+import { Upload } from 'lucide-react'
 import { useState, useTransition } from 'react'
 import { toast } from 'sonner'
 
-import { Badge, Button, ConfirmDialog, EmptyState, Field, Input, Modal } from '../components/ui'
-import { ANALYSIS_EVERY_DAYS, ANALYSIS_FIELDS, BULK_DENSITY_EVERY_M3, REQUIRED_ANALYSIS, type LabKind, type LabReport, type LabStatus } from '../data/lab'
+import { Badge, Button, Input, Modal } from '../components/ui'
+import { ANALYSIS_FIELDS, BULK_DENSITY_EVERY_M3, REQUIRED_ANALYSIS, type LabKind, type LabStatus } from '../data/lab'
 import { fileSize } from '../lib/files'
 import { cn, day, num } from '../lib/utils'
 import { unwrap } from '../lib/unwrap'
-import { addLabReport, deleteLabReport } from '../server/lab-reports'
+import { addLabReport } from '../server/lab-reports'
 
 /** Compact status for one network's row in the feedstock table. */
 export function LabStatusCells({ status }: { status: LabStatus | undefined }) {
@@ -40,153 +40,26 @@ export function LabStatusCells({ status }: { status: LabStatus | undefined }) {
   )
 }
 
-/** One network's lab reports for a feedstock: where it stands, the archive, and uploading a new report. */
-export function LabReportsModal({
-  open,
-  onOpenChange,
-  feedstock,
-  feedstockId,
-  network,
-  status,
-  reports,
-  reference,
-  onChanged,
-}: {
-  open: boolean
-  onOpenChange: (o: boolean) => void
-  feedstock: string
-  feedstockId: string
-  network: { id: string; name: string }
-  status: LabStatus | undefined
-  reports: LabReport[]
-  reference: { bulkDensity?: number; carbonContent?: number } | undefined
-  onChanged: () => void
-}) {
-  const [uploading, setUploading] = useState<LabKind | null>(null)
-  const [removing, setRemoving] = useState<LabReport | null>(null)
-  const since = status?.sinceBulkDensityM3 ?? 0
-  const pct = Math.min(100, (since / BULK_DENSITY_EVERY_M3) * 100)
-
-  const remove = async (r: LabReport) => {
-    try {
-      unwrap(await deleteLabReport(r.id))
-      toast.success('Lab report removed')
-      onChanged()
-    } catch (err) {
-      toast.error('Could not remove the report', { description: err instanceof Error ? err.message : String(err) })
-    }
-  }
-
+/**
+ * A form field whose label always fits on one line (name, unit, and an "Optional" tag on the right), so every input
+ * in a row starts at the same height.
+ */
+function LabField({ label, unit, optional, children }: { label: string; unit?: string; optional?: boolean; children: React.ReactNode }) {
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title={`${feedstock} · ${network.name}`} description="Lab reports for this feedstock at this network." className="max-w-3xl">
-      <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-line p-3">
-            <div className="text-xs font-semibold text-ink-muted">Bulk density in use</div>
-            <div className="mt-1 text-lg font-bold tabular-nums">{reference?.bulkDensity ? `${num(reference.bulkDensity, 0)} kg/m³` : '—'}</div>
-            <div className="text-xs text-ink-muted">{status?.lastBulkDensity ? `Report of ${day(status.lastBulkDensity.date)}` : 'No report uploaded yet'}</div>
-          </div>
-          <div className={cn('rounded-xl border p-3', status?.bulkDensityDue ? 'border-danger/40 bg-danger-soft/40' : 'border-line')}>
-            <div className="text-xs font-semibold text-ink-muted">Biochar since the last bulk-density report</div>
-            <div className={cn('mt-1 text-lg font-bold tabular-nums', status?.bulkDensityDue && 'text-danger')}>
-              {num(since, 1)} / {BULK_DENSITY_EVERY_M3} m³
-            </div>
-            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
-              <div className={cn('h-full rounded-full', status?.bulkDensityDue ? 'bg-danger' : 'bg-info')} style={{ width: `${pct}%` }} />
-            </div>
-            {status?.bulkDensityDue && <div className="mt-1.5 text-xs font-semibold text-danger">A new bulk-density report is due</div>}
-          </div>
-          <div className={cn('rounded-xl border p-3', status?.analysisDue ? 'border-danger/40 bg-danger-soft/40' : 'border-line')}>
-            <div className="text-xs font-semibold text-ink-muted">Lab analysis</div>
-            <div className="mt-1 text-lg font-bold">{status?.lastAnalysis ? day(status.lastAnalysis.date) : '—'}</div>
-            <div className={cn('text-xs', status?.analysisDue ? 'font-semibold text-danger' : 'text-ink-muted')}>
-              {status?.analysisDue ? 'Due: one is needed every year' : `Needed every ${ANALYSIS_EVERY_DAYS / 365 === 1 ? 'year' : `${ANALYSIS_EVERY_DAYS} days`}`}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant={status?.bulkDensityDue ? 'primary' : 'outline'} onClick={() => setUploading('bulk-density')}>
-            <Scale /> Upload bulk density report
-          </Button>
-          <Button size="sm" variant={status?.analysisDue ? 'primary' : 'outline'} onClick={() => setUploading('analysis')}>
-            <FlaskConical /> Upload lab analysis
-          </Button>
-        </div>
-
-        <div>
-          <h3 className="mb-2 text-sm font-bold">Report archive</h3>
-          {reports.length ? (
-            <ul className="flex flex-col gap-2">
-              {reports.map((r) => (
-                <li key={r.id} className="rounded-xl border border-line p-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone={r.kind === 'analysis' ? 'info' : 'neutral'}>{r.kind === 'analysis' ? 'Lab analysis' : 'Bulk density'}</Badge>
-                    <span className="text-sm font-semibold">{day(r.reportDate)}</span>
-                    {r.producedM3 != null && <span className="text-xs text-ink-muted">at {num(r.producedM3, 1)} m³ produced</span>}
-                    <span className="flex-1" />
-                    {r.file && (
-                      <a
-                        href={`/admin/files/${r.file.id}`}
-                        target="_blank"
-                        rel="noopener"
-                        className="flex items-center gap-1 text-xs font-semibold text-brand hover:underline"
-                        title={r.file.name}
-                      >
-                        <Download className="size-3.5" /> {fileSize(r.file.size)}
-                      </a>
-                    )}
-                    <Button variant="ghost" size="icon-sm" aria-label="Remove this report" onClick={() => setRemoving(r)}>
-                      <Trash2 />
-                    </Button>
-                  </div>
-                  <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                    {r.bulkDensity != null && <Value label="Bulk density" value={`${num(r.bulkDensity, 0)} kg/m³`} />}
-                    {ANALYSIS_FIELDS.filter((f) => r.values[f.key] != null).map((f) => (
-                      <Value key={f.key} label={f.label} value={`${num(r.values[f.key]!, 2)}${f.unit ? ` ${f.unit}` : ''}`} />
-                    ))}
-                  </div>
-                  {(r.note || r.uploadedBy) && <div className="mt-1.5 text-xs text-ink-muted">{[r.note, r.uploadedBy && `Added by ${r.uploadedBy}`].filter(Boolean).join(' · ')}</div>}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <EmptyState icon={<FileText />} title="No lab reports yet" sub="Upload the bulk density report and the yearly lab analysis." />
-          )}
-        </div>
-      </div>
-
-      <UploadLabReport
-        key={uploading ?? 'none'}
-        kind={uploading}
-        onClose={() => setUploading(null)}
-        feedstock={feedstock}
-        feedstockId={feedstockId}
-        network={network}
-        onSaved={onChanged}
-      />
-      <ConfirmDialog
-        open={!!removing}
-        onOpenChange={(o) => !o && setRemoving(null)}
-        title="Remove this lab report?"
-        message="The report and its file are deleted. The bulk density in use stays as it is."
-        confirmLabel="Remove"
-        onConfirm={() => removing && void remove(removing)}
-      />
-    </Modal>
+    <label className="flex min-w-0 flex-col gap-1.5">
+      <span className="flex h-4 items-center gap-1.5 text-xs font-bold tracking-wide text-ink-muted uppercase">
+        <span className="truncate" title={unit ? `${label} (${unit})` : label}>
+          {label}
+          {unit && <span className="font-semibold normal-case"> ({unit})</span>}
+        </span>
+        {optional && <span className="ml-auto shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-semibold tracking-normal normal-case text-ink-subtle">Optional</span>}
+      </span>
+      {children}
+    </label>
   )
 }
 
-function Value({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-muted px-2.5 py-1.5">
-      <div className="text-[11px] font-semibold text-ink-muted uppercase">{label}</div>
-      <div className="text-sm font-semibold tabular-nums">{value}</div>
-    </div>
-  )
-}
-
-function UploadLabReport({
+export function UploadLabReport({
   kind,
   onClose,
   feedstock,
@@ -231,29 +104,26 @@ function UploadLabReport({
       className={analysis ? 'max-w-2xl' : undefined}
     >
       <form action={submit} className="flex flex-col gap-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Report date">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-4 sm:grid-cols-2">
+          <LabField label="Report date">
             <Input name="reportDate" type="date" required max={new Date().toISOString().slice(0, 10)} defaultValue={new Date().toISOString().slice(0, 10)} />
-          </Field>
-          <Field label={analysis ? 'Bulk density (kg/m³, if reported)' : 'Bulk density (kg/m³)'}>
+          </LabField>
+          <LabField label="Bulk density" unit="kg/m³" optional={analysis}>
             <Input name="bulkDensity" inputMode="decimal" required={!analysis} placeholder="462" />
-          </Field>
+          </LabField>
         </div>
         {analysis && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {ANALYSIS_FIELDS.map((f) => {
-              const required = REQUIRED_ANALYSIS.includes(f.key)
-              return (
-                <Field key={f.key} label={`${f.label}${f.unit ? ` (${f.unit})` : ''}${required ? '' : ' · optional'}`}>
-                  <Input name={f.key} inputMode="decimal" required={required} />
-                </Field>
-              )
-            })}
+          <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3">
+            {ANALYSIS_FIELDS.map((f) => (
+              <LabField key={f.key} label={f.label} unit={f.unit} optional={!REQUIRED_ANALYSIS.includes(f.key)}>
+                <Input name={f.key} inputMode="decimal" required={REQUIRED_ANALYSIS.includes(f.key)} />
+              </LabField>
+            ))}
           </div>
         )}
-        <Field label="Note (optional)">
+        <LabField label="Note" optional>
           <Input name="note" maxLength={300} placeholder="Lab name, sample code…" />
-        </Field>
+        </LabField>
         <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-line-strong p-4 hover:bg-muted">
           <Upload className="size-5 text-ink-muted" />
           <span className="min-w-0 flex-1 text-sm">

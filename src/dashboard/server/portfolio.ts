@@ -255,6 +255,21 @@ export async function updateDocument(id: string, form: FormData) {
   })()
 }
 
+/** Link a document to a project (organisation), or unlink it with null. */
+export async function setDocumentProject(id: string, orgId: string | null) {
+  return guard(async () => {
+    const { payload } = await requireAdmin()
+    if (typeof id !== 'string' || !/^[\w-]{1,64}$/.test(id)) throw new UserError('Invalid document')
+    if (orgId !== null && (typeof orgId !== 'string' || !/^[\w-]{1,64}$/.test(orgId))) throw new UserError('Choose a project')
+    if (orgId) {
+      const org = await payload.findByID({ collection: 'organizations', id: orgId, depth: 0, select: { id: true }, overrideAccess: true }).catch(() => null)
+      if (!org) throw new UserError('This project no longer exists')
+    }
+    await payload.update({ collection: 'documents', id, data: { organization: orgId }, depth: 0, select: { id: true }, overrideAccess: true })
+    revalidatePath('/admin/portfolio')
+  })()
+}
+
 /** Delete a document and its file. */
 export async function deleteDocument(id: string) {
   return guard(async () => {

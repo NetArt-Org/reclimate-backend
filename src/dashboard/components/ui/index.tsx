@@ -18,7 +18,7 @@ import { cn, initials } from '../../lib/utils'
 /* Button                                                              */
 /* ------------------------------------------------------------------ */
 
-const buttonVariants = cva(
+export const buttonVariants = cva(
   'inline-flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {

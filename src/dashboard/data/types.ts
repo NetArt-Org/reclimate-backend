@@ -36,8 +36,18 @@ export interface PortfolioFeedstock {
   strategy: FeedstockStrategy
   /** Has a site-specific carbon (SPC) value. */
   spc: boolean
-  /** The methane strategy document the registry asks for (uploaded files). */
+  /** The strategy from the company's methane strategy library (its kind is mirrored in `strategy`). */
+  strategyId?: string | null
+  /** Strategy documents uploaded on the feedstock itself (before the strategy library). */
   documents?: DocFile[]
+}
+
+/** A methane strategy in the company's library, with the supporting documents the registry asks for. */
+export interface MethaneStrategy {
+  id: string
+  name: string
+  kind: 'avoidance' | 'compensation'
+  documents: DocFile[]
 }
 
 /** Field-app rules for one kind of network (or the company default). */
@@ -104,6 +114,8 @@ export interface Company {
   documents: DocFile[]
   services: { afforestation: boolean; iot: boolean }
   feedstocks: PortfolioFeedstock[]
+  /** Methane strategies feedstocks can use. */
+  methaneStrategies?: MethaneStrategy[]
   mixingTypes: string[]
   applicationTypes: string[]
   approvedNetworkIds: string[]

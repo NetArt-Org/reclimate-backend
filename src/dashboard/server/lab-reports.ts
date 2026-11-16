@@ -38,7 +38,7 @@ export async function feedstockLab(feedstockId: string) {
         file: file ? { id: String(file.id), name: file.name, size: file.size ?? 0 } : null,
       }
     })
-    return { reports, statuses }
+    return { feedstock: { id: String(f.id), name: f.name }, reports, statuses }
   })()
 }
 

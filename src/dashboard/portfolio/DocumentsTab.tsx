@@ -1,6 +1,6 @@
 'use client'
 
-import { Download, FileText, MoreVertical, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
+import { Download, FileText, FolderOpen, Globe2, Link2, MoreVertical, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { toast } from 'sonner'
@@ -10,16 +10,26 @@ import { fileSize } from '../lib/files'
 import { day } from '../lib/utils'
 import { unwrap } from '../lib/unwrap'
 import { useDashboard } from '../data/store'
-import { addDocument, deleteDocument, updateDocument, type PortfolioDocument } from '../server/portfolio'
+import { addDocument, deleteDocument, setDocumentProject, updateDocument, type PortfolioDocument } from '../server/portfolio'
 
 const CATEGORY: Record<string, string> = { 'csi-compliance': 'CSI compliance', certificate: 'Certificate', other: 'Other' }
 
 export function DocumentsTab({ documents: all }: { documents: PortfolioDocument[] }) {
   const { data, filters } = useDashboard()
-  // With a project chosen in the Organisation filter, only that project's documents.
-  const project = filters.orgId ? data.orgs.find((o) => o.id === filters.orgId) : null
-  const documents = filters.orgId ? all.filter((d) => d.organizationId === filters.orgId) : all
-  const orgName = (id: string | null) => (id ? data.orgs.find((o) => o.id === id)?.name : null)
+  // The projects in the current selection: the Organisation dropdown, or else the projects of the chosen networks/sites.
+  const chosenNetworks = filters.networkIds.length
+    ? filters.networkIds
+    : filters.siteIds.length
+      ? data.sites.filter((x) => filters.siteIds.includes(x.id)).map((x) => x.networkId)
+      : []
+  const orgIds = filters.orgId ? [filters.orgId] : [...new Set(data.networks.filter((n) => chosenNetworks.includes(n.id)).map((n) => n.orgId))]
+  const projects = data.orgs.filter((o) => orgIds.includes(o.id))
+  const project = projects.length ? { id: projects[0].id, name: projects.map((o) => o.name).join(', ') } : null
+  // A document is for one project, or for all projects (no project set: certificates that cover every project).
+  const isShared = (d: PortfolioDocument) => !d.organizationId || !data.orgs.some((o) => o.id === d.organizationId)
+  const shared = all.filter(isShared)
+  const own = all.filter((d) => !!d.organizationId && orgIds.includes(d.organizationId))
+  const documents = project ? [...own, ...shared] : all
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<PortfolioDocument | null>(null)
   const [removing, setRemoving] = useState<PortfolioDocument | null>(null)
@@ -34,6 +44,25 @@ export function DocumentsTab({ documents: all }: { documents: PortfolioDocument[
       toast.error('Could not delete the document', { description: err instanceof Error ? err.message : String(err) })
     }
   }
+  const link = async (d: PortfolioDocument, orgId: string | null) => {
+    try {
+      unwrap(await setDocumentProject(d.id, orgId))
+      const name = data.orgs.find((o) => o.id === orgId)?.name
+      toast.success(name ? `Moved to ${name}` : 'Now for all projects', { description: d.title })
+      router.refresh()
+    } catch (err) {
+      toast.error('Could not change the project', { description: err instanceof Error ? err.message : String(err) })
+    }
+  }
+  const card = (d: PortfolioDocument) => (
+    <DocCard key={d.id} doc={d} onEdit={() => setEditing(d)} onRemove={() => setRemoving(d)} onLink={(orgId) => void link(d, orgId)} />
+  )
+
+  // Sections: documents for all projects first, then each project's own (only the chosen one when a project is picked).
+  const sections = [
+    { key: 'all', title: 'All projects', sub: 'Shown under every project', docs: shared },
+    ...(projects.length ? projects : data.orgs).map((o) => ({ key: o.id, title: o.name, sub: 'Only this project', docs: all.filter((d) => d.organizationId === o.id) })),
+  ].filter((g) => g.docs.length || orgIds.includes(g.key))
 
   return (
     <Card className="p-3 sm:p-4">
@@ -42,9 +71,11 @@ export function DocumentsTab({ documents: all }: { documents: PortfolioDocument[
           <FileText className="size-[18px]" />
         </span>
         <div className="min-w-[12rem] flex-1">
-          <h2 className="font-bold">Compliance documents</h2>
+          <h2 className="font-bold">Compliance documents{project ? ` · ${project.name}` : ''}</h2>
           <p className="text-sm text-ink-muted">
-            {project ? `Documents for ${project.name}.` : 'Certificates, verification statements and producer lists for the registry.'}
+            {project
+              ? `${project.name}'s documents and the ones for all projects. Clear the selection at the top to see every project.`
+              : 'Every project’s documents. Choose a project or network at the top to see only its documents.'}
           </p>
         </div>
         <Badge>{documents.length} docs</Badge>
@@ -53,60 +84,31 @@ export function DocumentsTab({ documents: all }: { documents: PortfolioDocument[
         </Button>
       </div>
 
-      {documents.length ? (
-        <ul className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {documents.map((d) => (
-            <li key={d.id} className="flex min-w-0 items-center gap-3 rounded-xl border border-line p-3.5 transition-colors hover:border-line-strong">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-clay-soft text-clay">
-                <FileText className="size-[18px]" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold" title={d.title}>
-                  {d.title}
-                </div>
-                <div className="truncate text-xs text-ink-muted">
-                  {[!project && orgName(d.organizationId), d.issuedAt && day(d.issuedAt), d.reference, CATEGORY[d.category]].filter(Boolean).join(' · ')}
-                  {d.file ? ` · ${fileSize(d.file.size)}` : ' · no file attached'}
-                </div>
-              </div>
-              {d.file && (
-                <a
-                  href={`/admin/files/${d.file.id}`}
-                  target="_blank"
-                  rel="noopener"
-                  aria-label={`Download ${d.title}`}
-                  className="flex size-8 items-center justify-center rounded-full text-ink-2 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-brand/40"
-                >
-                  <Download className="size-4" />
-                </a>
+      {all.length ? (
+        <div className="mt-5 flex flex-col gap-5">
+          {sections.map((g) => (
+            <section key={g.key}>
+              <h3 className="mb-2 flex items-center gap-2 text-xs font-bold tracking-wide text-ink-muted uppercase">
+                {g.key === 'all' ? <Globe2 className="size-3.5" /> : <FolderOpen className="size-3.5" />}
+                {g.title}
+                <span className="rounded-full bg-muted px-2 py-px text-[11px] font-semibold tracking-normal normal-case">{g.docs.length}</span>
+                <span className="font-medium tracking-normal normal-case text-ink-subtle">· {g.sub}</span>
+              </h3>
+              {g.docs.length ? (
+                <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{g.docs.map(card)}</ul>
+              ) : (
+                <p className="rounded-xl border border-dashed border-line p-4 text-sm text-ink-muted">
+                  No documents only for {g.title} yet. Add one, or use ⋮ → “Move to {g.title}” on a document above.
+                </p>
               )}
-              <Menu>
-                <MenuTrigger asChild>
-                  <Button variant="ghost" size="icon-sm" aria-label={`More for ${d.title}`}>
-                    <MoreVertical />
-                  </Button>
-                </MenuTrigger>
-                <MenuContent>
-                  <MenuItem onSelect={() => setEditing(d)}>
-                    <Pencil /> Edit or replace file
-                  </MenuItem>
-                  <MenuItem onSelect={() => setRemoving(d)} className="text-danger [&_svg]:text-danger">
-                    <Trash2 /> Delete
-                  </MenuItem>
-                </MenuContent>
-              </Menu>
-            </li>
+            </section>
           ))}
-        </ul>
+        </div>
       ) : (
-        <EmptyState
-          icon={<FileText />}
-          title={project ? `No documents for ${project.name}` : 'No documents yet'}
-          sub={project ? 'Add one, or assign an existing document to this project (Edit → Project).' : 'Add the CSI certificate, verification statements and producer lists.'}
-        />
+        <EmptyState icon={<FileText />} title="No documents yet" sub="Add the CSI certificate, verification statements and producer lists." />
       )}
 
-      <DocumentForm key={`new-${filters.orgId ?? ''}`} defaultOrg={filters.orgId} open={adding} onOpenChange={setAdding} />
+      <DocumentForm key={`new-${orgIds.join()}`} defaultOrg={projects.length === 1 ? projects[0].id : null} open={adding} onOpenChange={setAdding} />
       <DocumentForm key={editing?.id} doc={editing ?? undefined} open={!!editing} onOpenChange={(o) => !o && setEditing(null)} />
       <ConfirmDialog
         open={!!removing}
@@ -117,6 +119,75 @@ export function DocumentsTab({ documents: all }: { documents: PortfolioDocument[
         onConfirm={() => removing && void remove(removing)}
       />
     </Card>
+  )
+}
+
+/** One document: title, details, download, and a menu to edit, change its project or delete it. */
+function DocCard({
+  doc: d,
+  onEdit,
+  onRemove,
+  onLink,
+}: {
+  doc: PortfolioDocument
+  onEdit: () => void
+  onRemove: () => void
+  onLink: (orgId: string | null) => void
+}) {
+  const { data } = useDashboard()
+  return (
+    <li className="flex min-w-0 items-center gap-3 rounded-xl border border-line bg-surface p-3.5 transition-colors hover:border-line-strong">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-clay-soft text-clay">
+        <FileText className="size-[18px]" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-semibold" title={d.title}>
+          {d.title}
+        </div>
+        <div className="truncate text-xs text-ink-muted">
+          {[d.issuedAt && day(d.issuedAt), d.reference, CATEGORY[d.category]].filter(Boolean).join(' · ')}
+          {d.file ? ` · ${fileSize(d.file.size)}` : ' · no file attached'}
+        </div>
+      </div>
+      {d.file && (
+        <a
+          href={`/admin/files/${d.file.id}`}
+          target="_blank"
+          rel="noopener"
+          aria-label={`Download ${d.title}`}
+          className="flex size-8 items-center justify-center rounded-full text-ink-2 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-brand/40"
+        >
+          <Download className="size-4" />
+        </a>
+      )}
+      <Menu>
+        <MenuTrigger asChild>
+          <Button variant="ghost" size="icon-sm" aria-label={`More for ${d.title}`}>
+            <MoreVertical />
+          </Button>
+        </MenuTrigger>
+        <MenuContent>
+          <MenuItem onSelect={onEdit}>
+            <Pencil /> Edit or replace file
+          </MenuItem>
+          {data.orgs
+            .filter((o) => o.id !== d.organizationId)
+            .map((o) => (
+              <MenuItem key={o.id} onSelect={() => onLink(o.id)}>
+                <Link2 /> Move to {o.name}
+              </MenuItem>
+            ))}
+          {d.organizationId && (
+            <MenuItem onSelect={() => onLink(null)}>
+              <Globe2 /> Make it for all projects
+            </MenuItem>
+          )}
+          <MenuItem onSelect={onRemove} className="text-danger [&_svg]:text-danger">
+            <Trash2 /> Delete
+          </MenuItem>
+        </MenuContent>
+      </Menu>
+    </li>
   )
 }
 
@@ -170,9 +241,9 @@ function DocumentForm({ doc, defaultOrg, open, onOpenChange }: { doc?: Portfolio
             <Input name="expiresAt" type="date" defaultValue={doc?.expiresAt?.slice(0, 10)} />
           </Field>
         </div>
-        <Field label="Project" hint="The document shows when this project is chosen in the Organisation filter.">
+        <Field label="Project" hint="All projects: shown whichever project is chosen at the top. A project: shown only when that project is chosen.">
           <NativeSelect name="organization" defaultValue={doc ? (doc.organizationId ?? '') : (defaultOrg ?? '')}>
-            <option value="">No project (shown under All organisations only)</option>
+            <option value="">All projects (shown under every project)</option>
             {data.orgs.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.name} ({o.code})

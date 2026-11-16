@@ -5,20 +5,14 @@ import {
   Building2,
   ChevronDown,
   FolderKanban,
-  Leaf,
   Mail,
   MapPin,
   Pencil,
   Phone,
   Plus,
-  Shield,
-  FileText,
   Trash2,
-  Upload,
-  Wind,
-  X,
 } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { HistoryButton } from '../components/HistoryPanel'
@@ -50,19 +44,11 @@ import {
   REGISTRIES,
 } from '../data/catalog'
 import { useDashboard } from '../data/store'
-import type { Company, DocFile, FeedstockReference, FeedstockStrategy, Project } from '../data/types'
-import { fileSize, readDoc } from '../lib/files'
+import type { Company, FeedstockReference, Project } from '../data/types'
 import { cn, day, uid } from '../lib/utils'
 import { AppConfigCard } from './AppConfigCard'
+import { FeedstockPortfolio } from './FeedstockPortfolio'
 import { ChipPicker, ContactList, DocList, Section } from './parts'
-
-const STRATEGY: Record<
-  'avoidance' | 'compensation',
-  { label: string; tone: string; icon: typeof Shield }
-> = {
-  avoidance: { label: 'Avoidance strategy', tone: 'text-danger', icon: Shield },
-  compensation: { label: 'Compensation strategy', tone: 'text-info', icon: Wind },
-}
 
 /** The C-sink manager company: contacts and documents on the left, how the programme runs on the right. */
 export function CompanyTab() {
@@ -333,197 +319,6 @@ function CompanyForm({
         </Button>
       </div>
     </form>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/* Feedstock portfolio                                                  */
-/* ------------------------------------------------------------------ */
-
-function FeedstockPortfolio() {
-  const { data, updateCompany } = useDashboard()
-  const { user } = useSession()
-  const list = data.company.feedstocks
-  const set = (recipe: (c: Company) => void, change: string) =>
-    updateCompany(recipe, { by: user.name, change })
-  const missing = data.feedstocks.map((f) => f.name).filter((f) => !list.some((x) => x.name === f))
-
-  return (
-    <Section
-      title="Feedstock portfolio"
-      description="Biomass types the programme accepts, and the methane strategy for each."
-      action={
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button size="sm" className="rounded-lg" disabled={!missing.length}>
-              <Plus /> Add feedstock
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-64 p-1.5">
-            {missing.map((f) => (
-              <OptionRow
-                key={f}
-                selected={false}
-                onClick={() =>
-                  set(
-                    (c) => void c.feedstocks.push({ name: f, strategy: null, spc: false }),
-                    `Feedstock added: ${f}`,
-                  )
-                }
-              >
-                {f}
-              </OptionRow>
-            ))}
-          </PopoverContent>
-        </Popover>
-      }
-    >
-      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
-        {list.map((f) => {
-          const s = f.strategy ? STRATEGY[f.strategy] : null
-          const update = (patch: Partial<typeof f>, change: string) =>
-            set((c) => {
-              const x = c.feedstocks.find((y) => y.name === f.name)
-              if (x) Object.assign(x, patch)
-            }, change)
-          return (
-            <div
-              key={f.name}
-              className="group flex items-center gap-3 rounded-xl border border-line px-3.5 py-3"
-            >
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand">
-                <Leaf className="size-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-sm font-semibold">{f.name}</span>
-                  {f.spc && (
-                    <Tooltip content="Has a site-specific carbon value">
-                      <span className="rounded bg-warn-soft px-1.5 py-0.5 text-[10px] font-bold text-warn">
-                        SPC
-                      </span>
-                    </Tooltip>
-                  )}
-                </div>
-                <Menu>
-                  <MenuTrigger asChild>
-                    <button
-                      type="button"
-                      className={cn(
-                        'mt-0.5 flex cursor-pointer items-center gap-1 text-xs font-semibold',
-                        s ? s.tone : 'text-ink-subtle',
-                      )}
-                    >
-                      {s ? <s.icon className="size-3" /> : null}
-                      {s ? s.label : 'Set methane strategy'}
-                      <ChevronDown className="size-3" />
-                    </button>
-                  </MenuTrigger>
-                  <MenuContent align="start">
-                    {(['avoidance', 'compensation', null] as FeedstockStrategy[]).map((k) => (
-                      <MenuItem
-                        key={String(k)}
-                        onSelect={() =>
-                          update(
-                            { strategy: k },
-                            `${f.name}: ${k ? STRATEGY[k].label.toLowerCase() : 'no strategy'}`,
-                          )
-                        }
-                      >
-                        {k ? STRATEGY[k].label : 'No strategy'}
-                      </MenuItem>
-                    ))}
-                    <MenuItem
-                      onSelect={() =>
-                        update({ spc: !f.spc }, `${f.name}: SPC ${f.spc ? 'removed' : 'added'}`)
-                      }
-                    >
-                      {f.spc ? 'Remove SPC' : 'Mark as SPC'}
-                    </MenuItem>
-                  </MenuContent>
-                </Menu>
-                <StrategyDocs
-                  feedstock={f.name}
-                  needed={!!f.strategy}
-                  docs={f.documents ?? []}
-                  onChange={(documents, change) => update({ documents }, change)}
-                />
-              </div>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                aria-label={`Remove ${f.name}`}
-                onClick={() =>
-                  set(
-                    (c) => void (c.feedstocks = c.feedstocks.filter((x) => x.name !== f.name)),
-                    `Feedstock removed: ${f.name}`,
-                  )
-                }
-              >
-                <Trash2 />
-              </Button>
-            </div>
-          )
-        })}
-      </div>
-    </Section>
-  )
-}
-
-/** The methane strategy's supporting document(s), which the registry asks for, under a feedstock. */
-function StrategyDocs({ feedstock, needed, docs, onChange }: { feedstock: string; needed: boolean; docs: DocFile[]; onChange: (d: DocFile[], change: string) => void }) {
-  const input = useRef<HTMLInputElement>(null)
-  const [busy, setBusy] = useState(false)
-  return (
-    <div className="mt-1.5 flex flex-col gap-1">
-      {docs.map((d) => (
-        <div key={d.id} className="group/doc flex min-w-0 items-center gap-1.5 text-xs">
-          <FileText className="size-3.5 shrink-0 text-success" />
-          <a href={d.url ?? `/admin/files/${d.id}`} target="_blank" rel="noopener" className="min-w-0 truncate font-semibold hover:underline" title={d.name}>
-            {d.name}
-          </a>
-          <span className="shrink-0 text-ink-subtle">{fileSize(d.size)}</span>
-          <button
-            type="button"
-            aria-label={`Remove ${d.name}`}
-            className="cursor-pointer text-ink-subtle opacity-0 group-hover/doc:opacity-100 hover:text-danger focus-visible:opacity-100"
-            onClick={() => onChange(docs.filter((x) => x.id !== d.id), `${feedstock}: strategy document removed`)}
-          >
-            <X className="size-3.5" />
-          </button>
-        </div>
-      ))}
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => input.current?.click()}
-        className={cn('flex w-fit cursor-pointer items-center gap-1 text-left text-xs font-semibold', needed && !docs.length ? 'text-warn' : 'text-ink-muted hover:text-ink')}
-      >
-        <Upload className="size-3" />
-        {busy ? 'Uploading…' : docs.length ? 'Add another document' : needed ? 'Upload strategy document (required by the registry)' : 'Upload strategy document'}
-      </button>
-      <input
-        ref={input}
-        type="file"
-        hidden
-        accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xlsx,.xls"
-        onChange={async (e) => {
-          const file = e.target.files?.[0]
-          e.target.value = ''
-          if (!file) return
-          setBusy(true)
-          try {
-            const doc = await readDoc(file)
-            onChange([...docs, doc], `${feedstock}: strategy document ${doc.name} added`)
-          } catch (err) {
-            toast.error('Could not upload the file', { description: err instanceof Error ? err.message : String(err) })
-          } finally {
-            setBusy(false)
-          }
-        }}
-      />
-    </div>
   )
 }
 
